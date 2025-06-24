@@ -228,6 +228,8 @@ class Generator3:
                                  [ca.i for ca in abox.c_assertions if ca.c == c]] for abox in relevant]
                 if len(abox_classes) == 0:
                     continue
+                if len(set(itertools.chain(*itertools.chain(*abox_classes)))) < 2*len(relevant):
+                    continue
                 if any(len(intersection(p)) >= 2 * len(relevant) for p in itertools.product(*abox_classes)):
                     candidates.append(c)
 
