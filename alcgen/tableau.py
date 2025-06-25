@@ -3,11 +3,11 @@ from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
 from itertools import chain
-from typing import TypeVar
+from typing import TypeVar, Mapping
 
 import numpy as np
 
-from alcgen.syntax import CE, AND, OR, NOT, ALL, ANY, to_pretty, BOT, TOP
+from alcgen.syntax import CE, AND, OR, NOT, ALL, ANY, to_pretty, BOT, TOP, to_manchester
 
 
 def nnf(t: CE) -> CE:
@@ -47,6 +47,26 @@ def eq(a: CE, b: CE) -> bool:
             return a == b
 
     return real_eq(nnf(a), nnf(b))
+
+
+def rename(ce: CE, mapping: Mapping[int, int]) -> CE:
+    if isinstance(ce, tuple):
+        if ce[0] == ANY or ce[0] == ALL:
+            return ce[0], ce[1], rename(ce[2], mapping)
+        else:
+            return (ce[0],) + tuple(rename(child, mapping) for child in ce[1:])
+    else:
+        return mapping.get(ce, ce)
+
+
+def insert_maximal(target: list[set], item: set):
+    for i, t in enumerate(target):
+        if item <= t:
+            return
+        elif t <= item:
+            target[i] = item
+            return
+    target.append(item)
 
 
 @dataclass(frozen=True)
@@ -510,37 +530,6 @@ class Generator3:
 
     # TODO controllabel distance between the clashing variables
 
-    def _close_zinc(self, aboxes: list[ABox]) -> bool:
-        import minizinc
-        all_pairs = self._pairs(aboxes)
-        different = self._different
-        n = max(itertools.chain(*itertools.chain(*all_pairs)))
-
-        print(all_pairs)
-        print(different)
-
-        driver = minizinc.Driver.find(["/home/jp/Pobrane/MiniZincIDE-2.9.3-bundle-linux-x86_64/bin"])
-        solver = minizinc.Solver.lookup("gecode", driver=driver)
-        model = minizinc.Model()
-        instance = minizinc.Instance(solver, model, driver)
-        # instance["pairs"] = all_pairs
-        # I think there's a bug in the MiniZinc's type inference/conversion module, so this is a work-around
-        instance.add_string(f"array[_] of array[_] of tuple(int, int): pairs = {all_pairs};")
-        instance.add_file("assignment.mzn")
-        instance["n"] = n
-        instance["different"] = list(different)
-        result = instance.solve()
-        print(result.status)
-        if result.status == minizinc.Status.OPTIMAL_SOLUTION:
-            ass = result['ass']
-            for i, v in enumerate(ass, start=1):
-                if i != v:
-                    self._define(i, (NOT, -v) if v < 0 else v)
-            return True
-        else:
-            print(result.status)
-            assert False
-
     def _close(self, aboxes: list[ABox]) -> bool:
         def helper(idx: int, order: list[int]) -> bool:
             if idx == len(order):
@@ -602,7 +591,61 @@ class Generator3:
                 return False
         return True
 
-    def run(self):
+    def _expand_different(self, a: int, b: int) -> set:
+        if self.definitions[a] is not None:
+            a = self.definitions[a]
+        if self.definitions[b] is not None:
+            b = self.definitions[b]
+        if isinstance(a, int) and isinstance(b, int):
+            return {frozenset([a, b])}
+        elif isinstance(a, tuple) and isinstance(b, tuple) and a[0] == b[0]:
+            if a[0] == NOT:
+                return self._expand_different(a[1], b[1])
+            elif a[0] == ANY or a[0] == ALL:
+                return self._expand_different(a[2], b[2]) if a[1] == b[1] else set()
+            else:
+                assert a[0] == AND or a[0] == OR
+                # This returns too many constraints as it would suffice for one pair to differ - but it is easier to force both of them
+                return self._expand_different(a[1], b[1]) | self._expand_different(a[2], b[2]) | self._expand_different(
+                    a[1], b[2]) | self._expand_different(a[2], b[1])
+        else:
+            return set()
+
+    def minimized(self, aboxes) -> CE:
+        unique = []
+        for abox in aboxes:
+            i2c = defaultdict(set)
+            for ca in abox.c_assertions:
+                c = self._expand(ca.c)
+                if isinstance(c, tuple):
+                    assert c[0] == NOT
+                    assert isinstance(c[1], int)
+                    i2c[ca.i].add(c[1])
+                else:
+                    i2c[ca.i].add(c)
+            for cls in i2c.values():
+                insert_maximal(unique, cls)
+        for d in self._different:
+            # This is an approximation, because it would suffice to one of the constraints to be satisfied
+            # But it is much easier to satisfy them all, at the cost of possibly using more symbols
+            for x in self._expand_different(*d):
+                insert_maximal(unique, x)
+        different_than = defaultdict(set)
+        mapping = {}
+        for batch in unique:
+            for u in batch:
+                different_than[u] |= batch
+        for k, others in different_than.items():
+            others.remove(k)
+            assert k not in mapping
+            used = {mapping[v] for v in others if v in mapping}
+            i = 1
+            while i in used:
+                i += 1
+            mapping[k] = i
+        return rename(self._expand(0), mapping)
+
+    def run(self, minimize: bool = True) -> CE:
         self._reset()
         c = self._new_class()
         i = self._new_individual()
@@ -612,26 +655,26 @@ class Generator3:
             if n is None:
                 break
             current = n
-        # print(current)
         while True:
             n = self._lonely_step(current)
             if n is None:
                 break
             current = n
-        print("# leaves", len(current))
-        # print(current)
-        print(to_pretty(self._expand(0)))
         closed = self._close(current)
-        print(closed, to_pretty(self._expand(0)))
         assert closed
+        if minimize:
+            return self.minimized(current)
+        else:
+            return self._expand(0)
 
-
-# TODO renaming to the smallest number of symbols? every leaf must remain the same in size + all different than must be taken into account
 
 def main():
-    for i in range(0, 100):
+    for i in range(0, 1):
         print(f"i={i}")
-        Generator3(RandomGuide(np.random.default_rng(0xfeed + 17 * i), 300, 500)).run()
+        result = Generator3(RandomGuide(np.random.default_rng(0xfeed + 17 * i), 1000, 1001)).run()
+        print(to_pretty(result))
+        with open("/tmp/a.owl", "wt") as f:
+            to_manchester(result, "http://example.com/foo", f)
         print()
 
 
