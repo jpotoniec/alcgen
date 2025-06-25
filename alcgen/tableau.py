@@ -3,70 +3,12 @@ from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
 from itertools import chain
-from typing import TypeVar, Mapping
+from typing import TypeVar
 
 import numpy as np
 
-from alcgen.syntax import CE, AND, OR, NOT, ALL, ANY, to_pretty, BOT, TOP, to_manchester
-
-
-def nnf(t: CE) -> CE:
-    if isinstance(t, tuple) and t[0] == NOT:
-        if isinstance(t[1], tuple):
-            if t[1][0] == NOT:
-                # double negation
-                return nnf(t[1][1])
-            elif t[1][0] == AND:
-                return OR, nnf((NOT, t[1][1])), nnf((NOT, t[1][2]))
-            elif t[1][0] == OR:
-                return AND, nnf((NOT, t[1][1])), nnf((NOT, t[1][2]))
-            elif t[1][0] == ALL:
-                return ANY, t[1][1], nnf((NOT, t[1][2]))
-            elif t[1][0] == ANY:
-                return ALL, t[1][1], nnf((NOT, t[1][2]))
-        elif t[1] == BOT:
-            return TOP
-        elif t[1] == TOP:
-            return BOT
-    return t
-
-
-def neg(t: CE) -> CE:
-    return nnf((NOT, t))
-
-
-def eq(a: CE, b: CE) -> bool:
-    def real_eq(a: CE, b: CE) -> bool:
-        if isinstance(a, tuple) and isinstance(b, tuple):
-            if a[0] != b[0] or len(a) != len(b):
-                return False
-            if a[0] == AND or a[0] == OR:
-                return (real_eq(a[1], b[1]) and real_eq(a[2], b[2])) or (real_eq(a[1], b[2]) and real_eq(a[2], b[1]))
-            return all(real_eq(c, d) for c, d in zip(a[1:], b[1:]))
-        else:
-            return a == b
-
-    return real_eq(nnf(a), nnf(b))
-
-
-def rename(ce: CE, mapping: Mapping[int, int]) -> CE:
-    if isinstance(ce, tuple):
-        if ce[0] == ANY or ce[0] == ALL:
-            return ce[0], ce[1], rename(ce[2], mapping)
-        else:
-            return (ce[0],) + tuple(rename(child, mapping) for child in ce[1:])
-    else:
-        return mapping.get(ce, ce)
-
-
-def insert_maximal(target: list[set], item: set):
-    for i, t in enumerate(target):
-        if item <= t:
-            return
-        elif t <= item:
-            target[i] = item
-            return
-    target.append(item)
+from alcgen.aux import insert_maximal
+from alcgen.syntax import CE, AND, OR, NOT, ALL, ANY, to_pretty, BOT, TOP, to_manchester, eq, rename
 
 
 @dataclass(frozen=True)
