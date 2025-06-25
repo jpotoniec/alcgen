@@ -228,7 +228,7 @@ class Generator3:
                                  [ca.i for ca in abox.c_assertions if ca.c == c]] for abox in relevant]
                 if len(abox_classes) == 0:
                     continue
-                if len(set(itertools.chain(*itertools.chain(*abox_classes)))) < 2*len(relevant):
+                if len(set(itertools.chain(*itertools.chain(*abox_classes)))) < 2 * len(relevant):
                     continue
                 if any(len(intersection(p)) >= 2 * len(relevant) for p in itertools.product(*abox_classes)):
                     candidates.append(c)
@@ -330,6 +330,25 @@ class Generator3:
                         if relevant_aboxes is None:
                             relevant_aboxes = [abox for abox in aboxes if any(cb.c == ca.c for cb in abox.c_assertions)]
                         if not all(is_suitable(other, ca, ra) for other in relevant_aboxes):
+                            continue
+                        # All aboxes where the new class expression will be applied there must share a class that can be the definer of the newly-introduced symbol
+                        ok = True
+                        shared_cls = None
+                        for abox in relevant_aboxes:
+                            ind = {rb.f for rb in abox.r_assertions if
+                                   rb.r == ra.r and any(cb.c == ca.c and cb.i == rb.i for cb in abox.c_assertions)}
+                            if len(ind) == 0:
+                                ok = False
+                                break
+                            cls = {cb.c for cb in abox.c_assertions if cb.c != ca.c and cb.i in ind}
+                            if shared_cls is None:
+                                shared_cls = cls
+                            else:
+                                shared_cls &= cls
+                            if len(shared_cls) == 0:
+                                ok = False
+                                break
+                        if not ok:
                             continue
                         ar.add((ca.c, ra.r))
         if len(ar) == 0:
@@ -576,9 +595,10 @@ class Generator3:
             order = sorted(subproblem, key=lambda p: len(all_pairs[p]))
             if not helper(0, order):
                 cls = set(itertools.chain(*itertools.chain(*[all_pairs[i] for i in order])))
+                print(self._different)
                 print(cls)
                 print([self._blocked[c] for c in cls])
-                print(*[abox for abox in aboxes if any(ca.c in cls for ca in abox.c_assertions)])
+                print(*[abox for abox in aboxes if any(ca.c in cls for ca in abox.c_assertions)], sep='\n')
                 return False
         return True
 
@@ -606,10 +626,12 @@ class Generator3:
         assert closed
 
 
+# TODO renaming to the smallest number of symbols? every leaf must remain the same in size + all different than must be taken into account
+
 def main():
     for i in range(0, 100):
         print(f"i={i}")
-        Generator3(RandomGuide(np.random.default_rng(0xfeed + 17 * i), 30, 50)).run()
+        Generator3(RandomGuide(np.random.default_rng(0xfeed + 17 * i), 300, 500)).run()
         print()
 
 
