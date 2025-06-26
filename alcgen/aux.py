@@ -24,3 +24,11 @@ def intersection(sets: Sequence[set]) -> set:
     if len(sets) == 1:
         return sets[0]
     return set(sets[0]).intersection(*sets[1:])
+
+
+def has_non_empty_intersection(a: set, b: set) -> bool:
+    if len(a) > len(b):
+        return has_non_empty_intersection(b, a)
+    if len(a) == 0 or len(b) == 0:
+        return False
+    return any(x in b for x in a)

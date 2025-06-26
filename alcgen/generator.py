@@ -4,7 +4,7 @@ from collections import defaultdict
 import numpy as np
 
 from alcgen.abox import CAssertion, RAssertion, ABox, PartialRAssertion
-from alcgen.aux import insert_maximal, intersection
+from alcgen.aux import insert_maximal, intersection, has_non_empty_intersection
 from alcgen.guide import Guide
 from alcgen.random_guide import RandomGuide
 from alcgen.syntax import CE, AND, OR, NOT, ALL, ANY, to_pretty, BOT, TOP, to_manchester, eq, rename
@@ -126,20 +126,27 @@ class Generator:
                 result.append(ABox(frozenset(base | fresh), abox.r_assertions, frozenset(fresh), abox.forbidden))
         return result
 
-    def _exists(self, aboxes: list[ABox]) -> list[ABox] | None:
+    def _exists_candidates(self, aboxes: list[ABox]) -> list[tuple[int, int]]:
         candidates = []
-        if self.n_roles > 0:
-            # Find all pairs atomic class - role that are not forbidden in any of the aboxes
-            for a in self._atomic_classes(False):
-                for r in range(self.n_roles):
-                    if not any(ca.c == a and PartialRAssertion(r, ca.i) in abox.forbidden for abox in aboxes for ca in
-                               abox.c_assertions):
-                        candidates.append((a, r))
+        if self.n_roles == 0:
+            return candidates
+        # Find all pairs atomic class - role that are not forbidden in any of the aboxes
+        forbidden_r2i = defaultdict(set)
+        for abox in aboxes:
+            for par in abox.forbidden:
+                forbidden_r2i[par.r].add(par.i)
+        for a in self._atomic_classes(False):
+            a_inds = set(itertools.chain(*[abox.individuals_of_class(a) for abox in aboxes]))
+            candidates += [(a, r) for r in range(self.n_roles) if
+                           not has_non_empty_intersection(forbidden_r2i[r], a_inds)]
+        return candidates
+
+    def _exists(self, aboxes: list[ABox]) -> list[ABox] | None:
+        candidates = self._exists_candidates(aboxes)
         if len(candidates) > 0:
             a, r = self.gen.select_class_role_pair(candidates)
         else:
             a = self.gen.select_class(self._atomic_classes(False))
-            # TODO or existing
             r = self._new_role()
         # reusing an existing class makes no sense since it will be a new individual anyhow
         b = self._new_class()
