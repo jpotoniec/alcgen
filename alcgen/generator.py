@@ -88,9 +88,9 @@ class Generator:
         if a is None:
             candidates = []
             for c in self._atomic_classes(True):
-                relevant = [abox for abox in aboxes if any(ca.c == c for ca in abox.c_assertions)]
-                abox_classes = [[{cb.c for cb in abox.c_assertions if cb.i == i and cb.c != c} for i in
-                                 [ca.i for ca in abox.c_assertions if ca.c == c]] for abox in relevant]
+                relevant = [abox for abox in aboxes if abox.has_class(c)]
+                abox_classes = [[abox.classes_of_individual(i) - {c} for i in abox.individuals_of_class(c)] for abox in
+                                relevant]
                 if len(abox_classes) == 0:
                     continue
                 if len(set(itertools.chain(*itertools.chain(*abox_classes)))) < 2 * len(relevant):
@@ -122,7 +122,6 @@ class Generator:
                 continue
             individuals = [ca.i for ca in rest]
             for classes in itertools.product([b, c], repeat=len(individuals)):
-                assert len(individuals) == len(classes)
                 fresh = {CAssertion(x, i) for x, i in zip(classes, individuals)}
                 result.append(ABox(frozenset(base | fresh), abox.r_assertions, frozenset(fresh), abox.forbidden))
         return result

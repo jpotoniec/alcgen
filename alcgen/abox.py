@@ -46,3 +46,12 @@ class ABox:
 
     def __str__(self):
         return repr(self)
+
+    def individuals_of_class(self, class_: int) -> set[int]:
+        return {ca.i for ca in self.c_assertions if ca.c == class_}
+
+    def classes_of_individual(self, individual: int) -> set[int]:
+        return {ca.c for ca in self.c_assertions if ca.i == individual}
+
+    def has_class(self, class_: int) -> bool:
+        return any(ca.c == class_ for ca in self.c_assertions)
