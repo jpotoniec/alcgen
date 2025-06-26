@@ -171,21 +171,21 @@ class Generator:
                 result.append(abox)
         return result
 
-    def _forall(self, aboxes: list[ABox]) -> list[ABox] | None:
-        def is_suitable(abox: ABox, ca: CAssertion, ra: RAssertion) -> bool:
-            # In every abox it must be either
-            relevant_ca = [cb for cb in abox.c_assertions if ca.c == cb.c]
-            if len(relevant_ca) == 0:
-                # 1. Not present at all -> i.e., no ca.c at all
-                return True
-            relevant_ra = [rb for rb in abox.r_assertions if ra.r == rb.r]
-            if len(relevant_ra) > 0 and any(cb.i == rb.i for cb in relevant_ca for rb in relevant_ra):
-                # 2. Applicable -> i.e., ca.c(i) and r(i, *) for some i
-                return True
-            # 3. Not applicable (i.e., for all i ca.c(i) => no r(i,*) ), but there's a fresh CA that can slavage the abox
-            return any(cb.c != ca.c for cb in abox.fresh)
+    def _forall_is_suitable(self, abox: ABox, ca: CAssertion, ra: RAssertion) -> bool:
+        # In every abox it must be either
+        relevant_ca = [cb for cb in abox.c_assertions if ca.c == cb.c]
+        if len(relevant_ca) == 0:
+            # 1. Not present at all -> i.e., no ca.c at all
+            return True
+        relevant_ra = [rb for rb in abox.r_assertions if ra.r == rb.r]
+        if len(relevant_ra) > 0 and any(cb.i == rb.i for cb in relevant_ca for rb in relevant_ra):
+            # 2. Applicable -> i.e., ca.c(i) and r(i, *) for some i
+            return True
+        # 3. Not applicable (i.e., for all i ca.c(i) => no r(i,*) ), but there's a fresh CA that can slavage the abox
+        return any(cb.c != ca.c for cb in abox.fresh)
 
-        ar = set()
+    def _forall_candidates(self, aboxes: list[ABox]) -> list[tuple[int, int]]:
+        ar = list()
         visited = set()
         for abox in aboxes:
             for ca in abox.c_assertions:
@@ -199,9 +199,9 @@ class Generator:
                         visited.add((ca.c, ra.r))
                         if relevant_aboxes is None:
                             relevant_aboxes = [abox for abox in aboxes if any(cb.c == ca.c for cb in abox.c_assertions)]
-                        if not all(is_suitable(other, ca, ra) for other in relevant_aboxes):
+                        if not all(self._forall_is_suitable(other, ca, ra) for other in relevant_aboxes):
                             continue
-                        # All aboxes where the new class expression will be applied there must share a class that can be the definer of the newly-introduced symbol
+                        # All aboxes where the new class expression will be applied must share a class that can be the definer of the newly-introduced symbol
                         ok = True
                         shared_cls = None
                         for abox in relevant_aboxes:
@@ -220,10 +220,14 @@ class Generator:
                                 break
                         if not ok:
                             continue
-                        ar.add((ca.c, ra.r))
+                        ar.append((ca.c, ra.r))
+        return ar
+
+    def _forall(self, aboxes: list[ABox]) -> list[ABox] | None:
+        ar = self._forall_candidates(aboxes)
         if len(ar) == 0:
             return None
-        a, r = self.gen.select_class_role_pair(list(ar))
+        a, r = self.gen.select_class_role_pair(ar)
         # TODO or existing?
         b = self._new_class()
         self._define(a, (ALL, r, b))

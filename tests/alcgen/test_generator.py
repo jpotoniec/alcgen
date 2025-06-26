@@ -197,6 +197,51 @@ def test_exists_existing_role():
     assert aboxes[0] == abox((2, 2), '*', (c0, i0), (r0, i0, i1), (r0, i1, 2), (r0, i0, None))
     assert g._definitions[1] == (ANY, r0, 2)
 
+
+def test_forall_is_suitable():
+    g = Generator(MockGuide([]))
+    c0 = g._new_class()
+    c1 = g._new_class()
+    i0 = g._new_individual()
+    i1 = g._new_individual()
+    r0 = g._new_role()
+    # 1. Not present
+    assert g._forall_is_suitable(abox((c0, i0)), CAssertion(c1, i1), RAssertion(r0, i0, i1))
+    assert g._forall_is_suitable(abox((r0, i0, i1)), CAssertion(c0, i0), RAssertion(r0, i0, i1))
+    # 2. Applicable
+    assert not g._forall_is_suitable(abox((c0, i0)), CAssertion(c0, i0), RAssertion(r0, i0, i1))
+    assert not g._forall_is_suitable(abox((c0, i1), (r0, i0, i1)), CAssertion(c0, i0), RAssertion(r0, i0, i1))
+    assert g._forall_is_suitable(abox((c0, i0), (r0, i0, i1)), CAssertion(c0, i0), RAssertion(r0, i0, i1))
+    # 3. Salvagable
+    assert not g._forall_is_suitable(abox((c0, i0), (c1, i0)), CAssertion(c0, i0), RAssertion(r0, i0, i1))
+    assert g._forall_is_suitable(abox((c0, i0), (c1, i0), '*'), CAssertion(c0, i0), RAssertion(r0, i0, i1))
+
+
+def test_forall_candidates():
+    g = Generator(MockGuide([]))
+    c0 = g._new_class()
+    c1 = g._new_class()
+    c2 = g._new_class()
+    i0 = g._new_individual()
+    i1 = g._new_individual()
+    i2 = g._new_individual()
+    r0 = g._new_role()
+    assert g._forall_candidates([abox((c0, i0), (r0, i0, i1))]) == []
+    assert g._forall_candidates([abox((c0, i0), (c1, i0), (r0, i0, i1))]) == []
+    assert g._forall_candidates([abox((c0, i0), (c1, i1), (r0, i0, i1))]) == [(c0, r0)]
+    assert g._forall_candidates([abox((c0, i0), (c1, i1), (r0, i0, i1)),
+                                 abox((c0, i0), (c2, i1), (r0, i0, i1))
+                                 ]) == []
+    assert g._forall_candidates([abox((c0, i0), (c1, i1), (r0, i0, i1)),
+                                 abox((c0, i0), (c1, i1), (r0, i1, i0))
+                                 ]) == []
+    assert g._forall_candidates([abox((c0, i0), (c1, i1), (r0, i0, i1)),
+                                 abox((c0, i1), (c1, i2), (r0, i1, i2))
+                                 ]) == [(c0, r0)]
+    assert g._forall_candidates([abox((c0, i0), (c1, i1), (r0, i0, i1)),
+                                 abox((c0, i0), (c1, i1), '*')
+                                 ]) == []
+
 # def test_nothing():
 #     ce = Generator(MockGuide([], 3)).run(True)
 #     assert ce == (AND, (AND, 1, 2), (AND, (NOT, 2), 3))
