@@ -55,3 +55,12 @@ class ABox:
 
     def has_class(self, class_: int) -> bool:
         return any(ca.c == class_ for ca in self.c_assertions)
+
+    def lfillers_of_role(self, role: int) -> set[int]:
+        return {ra.i for ra in self.r_assertions if ra.r == role}
+
+    def rfillers(self, role: int, lfiller: int | None) -> set[int]:
+        if lfiller is not None:
+            return {ra.f for ra in self.r_assertions if ra.r == role and ra.i == lfiller}
+        else:
+            return {ra.f for ra in self.r_assertions if ra.r == role}

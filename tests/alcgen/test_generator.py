@@ -3,7 +3,7 @@ from typing import Sequence, TypeVar
 from alcgen.abox import PartialRAssertion, RAssertion
 from alcgen.generator import Generator, CAssertion, ABox
 from alcgen.guide import Guide
-from alcgen.syntax import ANY
+from alcgen.syntax import ANY, NOT, TOP, BOT, AND, ALL
 
 _T = TypeVar('_T')
 
@@ -206,15 +206,15 @@ def test_forall_is_suitable():
     i1 = g._new_individual()
     r0 = g._new_role()
     # 1. Not present
-    assert g._forall_is_suitable(abox((c0, i0)), CAssertion(c1, i1), RAssertion(r0, i0, i1))
-    assert g._forall_is_suitable(abox((r0, i0, i1)), CAssertion(c0, i0), RAssertion(r0, i0, i1))
+    assert g._forall_is_suitable(abox((c0, i0)), c1, r0)
+    assert g._forall_is_suitable(abox((r0, i0, i1)), c0, r0)
     # 2. Applicable
-    assert not g._forall_is_suitable(abox((c0, i0)), CAssertion(c0, i0), RAssertion(r0, i0, i1))
-    assert not g._forall_is_suitable(abox((c0, i1), (r0, i0, i1)), CAssertion(c0, i0), RAssertion(r0, i0, i1))
-    assert g._forall_is_suitable(abox((c0, i0), (r0, i0, i1)), CAssertion(c0, i0), RAssertion(r0, i0, i1))
+    assert not g._forall_is_suitable(abox((c0, i0)), c0, r0)
+    assert not g._forall_is_suitable(abox((c0, i1), (r0, i0, i1)), c0, r0)
+    assert g._forall_is_suitable(abox((c0, i0), (r0, i0, i1)), c0, r0)
     # 3. Salvagable
-    assert not g._forall_is_suitable(abox((c0, i0), (c1, i0)), CAssertion(c0, i0), RAssertion(r0, i0, i1))
-    assert g._forall_is_suitable(abox((c0, i0), (c1, i0), '*'), CAssertion(c0, i0), RAssertion(r0, i0, i1))
+    assert not g._forall_is_suitable(abox((c0, i0), (c1, i0)), c0, r0)
+    assert g._forall_is_suitable(abox((c0, i0), (c1, i0), '*'), c0, r0)
 
 
 def test_forall_candidates():
@@ -241,6 +241,83 @@ def test_forall_candidates():
     assert g._forall_candidates([abox((c0, i0), (c1, i1), (r0, i0, i1)),
                                  abox((c0, i0), (c1, i1), '*')
                                  ]) == []
+
+
+def test_forall():
+    g = Generator(MockGuide([]))
+    c0 = g._new_class()
+    c1 = g._new_class()
+    i0 = g._new_individual()
+    i1 = g._new_individual()
+    r0 = g._new_role()
+    aboxes = g._forall([
+        abox((c0, i0), (c1, i1), (r0, i0, i1)),
+        abox((c1, i0), '*')
+    ])
+    assert aboxes == [
+        abox((c1, i1), (r0, i0, i1), (2, i1), '*', (r0, i0, None)),
+        abox((c1, i0), '*')
+    ]
+    assert g._definitions[0] == (ALL, r0, 2)
+
+
+def test_forall_none():
+    g = Generator(MockGuide([]))
+    c0 = g._new_class()
+    c1 = g._new_class()
+    i0 = g._new_individual()
+    i1 = g._new_individual()
+    r0 = g._new_role()
+    aboxes = g._forall([abox((c0, i0), (c1, i0), (r0, i0, i1))])
+    assert aboxes is None
+
+
+def test_expand_double_negation():
+    g = Generator(MockGuide([]))
+    c0 = g._new_class()
+    c1 = g._new_class()
+    g._define(c0, (NOT, (NOT, c1)))
+    assert g._expand(c0) == c1
+
+
+def test_expand_not_top():
+    g = Generator(MockGuide([]))
+    c0 = g._new_class()
+    g._define(c0, (NOT, TOP))
+    assert g._expand(c0) == BOT
+
+
+def test_expand_and():
+    g = Generator(MockGuide([]))
+    c0 = g._new_class()
+    c1 = g._new_class()
+    c2 = g._new_class()
+    g._define(c0, (AND, c1, c2))
+    g._define(c1, (NOT, c2))
+    assert g._expand(c0) == (AND, (NOT, c2), c2)
+
+
+def test_expand_any():
+    g = Generator(MockGuide([]))
+    c0 = g._new_class()
+    c1 = g._new_class()
+    c2 = g._new_class()
+    r0 = g._new_role()
+    g._define(c0, (ANY, r0, c1))
+    g._define(c1, (NOT, c2))
+    assert g._expand(c0) == (ANY, r0, (NOT, c2))
+
+
+def test_is_closed():
+    g = Generator(MockGuide([]))
+    c0 = g._new_class()
+    c1 = g._new_class()
+    i0 = g._new_individual()
+    i1 = g._new_individual()
+    assert not g._is_closed(abox((c0, i0), (c1, i0), '*'))
+    g._define(c1, (NOT, c0))
+    assert g._is_closed(abox((c0, i0), (c1, i0), '*'))
+    assert not g._is_closed(abox((c0, i0), (c1, i1), '*'))
 
 # def test_nothing():
 #     ce = Generator(MockGuide([], 3)).run(True)

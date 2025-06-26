@@ -7,7 +7,7 @@ from alcgen.abox import CAssertion, RAssertion, ABox, PartialRAssertion
 from alcgen.aux import insert_maximal, intersection, has_non_empty_intersection
 from alcgen.guide import Guide
 from alcgen.random_guide import RandomGuide
-from alcgen.syntax import CE, AND, OR, NOT, ALL, ANY, to_pretty, BOT, TOP, to_manchester, eq, rename
+from alcgen.syntax import CE, AND, OR, NOT, ALL, ANY, to_pretty, BOT, TOP, to_manchester, eq, rename, nnf
 
 
 # TODO controllabel distance between the clashing variables
@@ -171,56 +171,56 @@ class Generator:
                 result.append(abox)
         return result
 
-    def _forall_is_suitable(self, abox: ABox, ca: CAssertion, ra: RAssertion) -> bool:
+    def _forall_is_suitable(self, abox: ABox, c: int, r: int) -> bool:
         # In every abox it must be either
-        relevant_ca = [cb for cb in abox.c_assertions if ca.c == cb.c]
-        if len(relevant_ca) == 0:
-            # 1. Not present at all -> i.e., no ca.c at all
+        relevant_c_i = abox.individuals_of_class(c)
+        if len(relevant_c_i) == 0:
+            # 1. Not present at all -> i.e., no c at all
             return True
-        relevant_ra = [rb for rb in abox.r_assertions if ra.r == rb.r]
-        if len(relevant_ra) > 0 and any(cb.i == rb.i for cb in relevant_ca for rb in relevant_ra):
-            # 2. Applicable -> i.e., ca.c(i) and r(i, *) for some i
+        if has_non_empty_intersection(abox.lfillers_of_role(r), relevant_c_i):
+            # 2. Applicable -> i.e., c(i) and r(i, *) for some i
             return True
-        # 3. Not applicable (i.e., for all i ca.c(i) => no r(i,*) ), but there's a fresh CA that can slavage the abox
-        return any(cb.c != ca.c for cb in abox.fresh)
+        # 3. Not applicable (i.e., for all i c(i) => no r(i,*) ), but there's a fresh CA that can slavage the abox
+        return any(cb.c != c for cb in abox.fresh)
 
     def _forall_candidates(self, aboxes: list[ABox]) -> list[tuple[int, int]]:
         ar = list()
         visited = set()
+        relevant_aboxes = {}
         for abox in aboxes:
-            for ca in abox.c_assertions:
-                if self._is_atomic(ca.c) and not self._blocked[ca.c]:
-                    relevant_aboxes = None
-                    for ra in abox.r_assertions:
-                        if ra.i != ca.i:
-                            continue
-                        if (ca.c, ra.r) in visited:
-                            continue
-                        visited.add((ca.c, ra.r))
-                        if relevant_aboxes is None:
-                            relevant_aboxes = [abox for abox in aboxes if any(cb.c == ca.c for cb in abox.c_assertions)]
-                        if not all(self._forall_is_suitable(other, ca, ra) for other in relevant_aboxes):
-                            continue
-                        # All aboxes where the new class expression will be applied must share a class that can be the definer of the newly-introduced symbol
-                        ok = True
-                        shared_cls = None
-                        for abox in relevant_aboxes:
-                            ind = {rb.f for rb in abox.r_assertions if
-                                   rb.r == ra.r and any(cb.c == ca.c and cb.i == rb.i for cb in abox.c_assertions)}
-                            if len(ind) == 0:
-                                ok = False
-                                break
-                            cls = {cb.c for cb in abox.c_assertions if cb.c != ca.c and cb.i in ind}
-                            if shared_cls is None:
-                                shared_cls = cls
-                            else:
-                                shared_cls &= cls
-                            if len(shared_cls) == 0:
-                                ok = False
-                                break
-                        if not ok:
-                            continue
-                        ar.append((ca.c, ra.r))
+            for ra in abox.r_assertions:
+                for c in abox.classes_of_individual(ra.i):
+                    if not self._is_atomic(c):
+                        continue
+                    if self._blocked[c]:
+                        continue
+                    key = (c, ra.r)
+                    if key in visited:
+                        continue
+                    visited.add(key)
+                    if c not in relevant_aboxes:
+                        c_relevant_aboxes = relevant_aboxes[c] = [abox for abox in aboxes if abox.has_class(c)]
+                    else:
+                        c_relevant_aboxes = relevant_aboxes[c]
+                    if not all(self._forall_is_suitable(other, c, ra.r) for other in c_relevant_aboxes):
+                        continue
+                    # All aboxes where the new class expression will be applied must share a class that can be the definer of the newly-introduced symbol
+                    ok = True
+                    shared_cls = None
+                    for abox in c_relevant_aboxes:
+                        ind = {rb.f for rb in abox.r_assertions if
+                               rb.r == ra.r and rb.i in abox.individuals_of_class(c)}
+                        if len(ind) == 0:
+                            ok = False
+                            break
+                        shared_cls = {cb.c for cb in abox.c_assertions if
+                                      cb.c != c and cb.i in ind and (shared_cls is None or cb.c in shared_cls)}
+                        if len(shared_cls) == 0:
+                            ok = False
+                            break
+                    if not ok:
+                        continue
+                    ar.append(key)
         return ar
 
     def _forall(self, aboxes: list[ABox]) -> list[ABox] | None:
@@ -228,7 +228,6 @@ class Generator:
         if len(ar) == 0:
             return None
         a, r = self.gen.select_class_role_pair(ar)
-        # TODO or existing?
         b = self._new_class()
         self._define(a, (ALL, r, b))
         result = []
@@ -237,14 +236,11 @@ class Generator:
             fresh = set()
             forbidden = set()
             is_stale = True
-            for ca in abox.c_assertions:
-                if ca.c == a:
-                    for ra in abox.r_assertions:
-                        if ra.r == r and ra.i == ca.i:
-                            fresh.add(CAssertion(b, ra.f))
-                    forbidden.add(PartialRAssertion(r, ca.i))
-                    cassertions.remove(ca)
-                    is_stale = False
+            for i in abox.individuals_of_class(a):
+                fresh |= {CAssertion(b, f) for f in abox.rfillers(r, i)}
+                forbidden.add(PartialRAssertion(r, i))
+                cassertions.remove(CAssertion(a, i))
+                is_stale = False
             if not is_stale:
                 result.append(ABox(frozenset(cassertions | fresh), frozenset(abox.r_assertions),
                                    frozenset(fresh) if len(fresh) > 0 else abox.fresh & cassertions,
@@ -254,30 +250,25 @@ class Generator:
         return result
 
     def _expand(self, ce: CE) -> CE:
-        if isinstance(ce, tuple):
-            if ce[0] == AND or ce[0] == OR:
-                return ce[0], self._expand(ce[1]), self._expand(ce[2])
-            elif ce[0] == ANY or ce[0] == ALL:
-                return ce[0], ce[1], self._expand(ce[2])
-            else:
-                assert ce[0] == NOT
-                e = self._expand(ce[1])
-                if e == TOP:
-                    return BOT
-                elif e == BOT:
-                    return TOP
-                elif isinstance(e, tuple) and e[0] == NOT:
-                    return e[1]
+        def aux(ce: CE) -> CE:
+            if isinstance(ce, tuple):
+                if ce[0] == AND or ce[0] == OR:
+                    return ce[0], aux(ce[1]), aux(ce[2])
+                elif ce[0] == ANY or ce[0] == ALL:
+                    return ce[0], ce[1], aux(ce[2])
                 else:
-                    return NOT, e
-        elif ce == TOP or ce == BOT:
-            return ce
-        else:
-            d = self._definitions[ce]
-            if d is None:
+                    assert ce[0] == NOT
+                    return NOT, aux(ce[1])
+            elif ce == TOP or ce == BOT:
                 return ce
             else:
-                return self._expand(d)
+                d = self._definitions[ce]
+                if d is None:
+                    return ce
+                else:
+                    return aux(d)
+
+        return nnf(aux(ce))
 
     def _lonely_assertions(self, aboxes: list[ABox]) -> set[CAssertion]:
         result = set()
@@ -333,9 +324,9 @@ class Generator:
     def _is_closed(self, abox: ABox) -> bool:
         for ca in abox.fresh:
             if not self._is_atomic(ca.c):
-                for cb in abox.c_assertions:
-                    if ca.i == cb.i and eq(self._expand(ca.c), self._expand((NOT, cb.c))):
-                        return True
+                if any(c != ca.c and eq(self._expand(ca.c), self._expand((NOT, c))) for c in
+                       abox.classes_of_individual(ca.i)):
+                    return True
         return False
 
     def _find_subproblems(self, all_pairs: list[list[tuple[int, int]]]) -> list[set[int]]:
