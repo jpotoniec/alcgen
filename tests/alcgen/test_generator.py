@@ -29,6 +29,35 @@ class MockGuide(Guide):
         return self.n
 
 
+def abox(*args) -> ABox:
+    c_assertions = set()
+    r_assertions = set()
+    forbidden = set()
+    fresh = set()
+    last = None
+    for a in args:
+        if isinstance(a, tuple):
+            if len(a) == 2:
+                a = CAssertion(a[0], a[1])
+            elif len(a) == 3:
+                if a[2] is not None:
+                    a = RAssertion(a[0], a[1], a[2])
+                else:
+                    a = PartialRAssertion(a[0], a[1])
+            else:
+                assert False
+        if isinstance(a, CAssertion):
+            c_assertions.add(a)
+        elif isinstance(a, RAssertion):
+            r_assertions.add(a)
+        elif isinstance(a, PartialRAssertion):
+            forbidden.add(a)
+        elif isinstance(a, str) and a == '*' and last is not None:
+            fresh.add(last)
+        last = a
+    return ABox(frozenset(c_assertions), frozenset(r_assertions), frozenset(fresh), frozenset(forbidden))
+
+
 def test_and():
     g = Generator(MockGuide([]))
     c0 = g._new_class()
@@ -36,25 +65,18 @@ def test_and():
     i0 = g._new_individual()
     i1 = g._new_individual()
     i2 = g._new_individual()
-    aboxes = g._and([ABox({CAssertion(c0, i0)}, set(), set(), set()),
-                     ABox({CAssertion(c1, i0)}, set(), set(), set()),
-                     ABox({CAssertion(c0, i1), CAssertion(c0, i2), CAssertion(c1, i1)}, set(), set(), set()),
-                     ])
+    aboxes = g._and([abox((c0, i0)), abox((c1, i0)), abox((c0, i1), (c0, i2), (c1, i1))])
     assert len(aboxes) == 3
-    assert aboxes[0].c_assertions == {CAssertion(2, i0), CAssertion(3, i0)}
-    assert aboxes[0].fresh == {CAssertion(2, i0), CAssertion(3, i0)}
-    assert aboxes[1].c_assertions == {CAssertion(c1, i0)}
-    assert len(aboxes[1].fresh) == 0
-    assert aboxes[2].c_assertions == {CAssertion(2, i1), CAssertion(3, i1), CAssertion(2, i2), CAssertion(3, i2),
-                                      CAssertion(c1, i1)}
-    assert aboxes[2].fresh == {CAssertion(2, i1), CAssertion(3, i1), CAssertion(2, i2), CAssertion(3, i2)}
+    assert aboxes[0] == abox((2, i0), '*', (3, i0), '*')
+    assert aboxes[1] == abox((c1, i0))
+    assert aboxes[2] == abox((2, i1), '*', (3, i1), '*', (2, i2), '*', (3, i2), '*', (c1, i1))
 
 
 def test_or_impossible_lonely_assertion():
     g = Generator(MockGuide([]))
     c0 = g._new_class()
     i0 = g._new_individual()
-    aboxes = g._or([ABox({CAssertion(c0, i0)}, set(), set(), set())])
+    aboxes = g._or([abox((c0, i0))])
     assert aboxes is None
 
 
@@ -63,7 +85,7 @@ def test_or_impossible_only_one_other_assertion():
     c0 = g._new_class()
     c1 = g._new_class()
     i0 = g._new_individual()
-    aboxes = g._or([ABox({CAssertion(c0, i0), CAssertion(c1, i0)}, set(), set(), set())])
+    aboxes = g._or([abox((c0, i0), (c1, i0))])
     assert aboxes is None
 
 
@@ -73,12 +95,10 @@ def test_or_possible():
     c1 = g._new_class()
     c2 = g._new_class()
     i0 = g._new_individual()
-    aboxes = g._or([ABox({CAssertion(c0, i0), CAssertion(c1, i0), CAssertion(c2, i0)}, set(), set(), set())])
+    aboxes = g._or([abox((c0, i0), (c1, i0), (c2, i0))])
     assert len(aboxes) == 2
-    assert aboxes[0].c_assertions == {CAssertion(3, i0), CAssertion(c1, i0), CAssertion(c2, i0)}
-    assert aboxes[0].fresh == {CAssertion(3, i0)}
-    assert aboxes[1].c_assertions == {CAssertion(4, i0), CAssertion(c1, i0), CAssertion(c2, i0)}
-    assert aboxes[1].fresh == {CAssertion(4, i0)}
+    assert aboxes[0] == abox((3, i0), '*', (c1, i0), (c2, i0))
+    assert aboxes[1] == abox((4, i0), '*', (c2, i0), (c1, i0))
     assert g._blocked[c1]
     assert g._blocked[c2]
 
@@ -90,7 +110,7 @@ def test_or_impossible_wrong_individuals():
     c2 = g._new_class()
     i0 = g._new_individual()
     i1 = g._new_individual()
-    aboxes = g._or([ABox({CAssertion(c0, i0), CAssertion(c1, i0), CAssertion(c2, i1)}, set(), set(), set())])
+    aboxes = g._or([abox((c0, i0), (c1, i0), (c2, i1))])
     assert aboxes is None
 
 
@@ -102,10 +122,10 @@ def test_or_impossible_no_common():
     c3 = g._new_class()
     c4 = g._new_class()
     i0 = g._new_individual()
-    aboxes = g._or([ABox({CAssertion(c0, i0), CAssertion(c1, i0), CAssertion(c2, i0)}, set(), set(), set()),
-                    ABox({CAssertion(c0, i0), CAssertion(c3, i0), CAssertion(c4, i0)}, set(), set(), set()),
-                    ABox({CAssertion(c3, i0), CAssertion(c1, i0), CAssertion(c2, i0)}, set(), set(), set()),
-                    ABox({CAssertion(c4, i0), CAssertion(c1, i0), CAssertion(c2, i0)}, set(), set(), set()),
+    aboxes = g._or([abox((c0, i0), (c1, i0), (c2, i0)),
+                    abox((c0, i0), (c3, i0), (c4, i0)),
+                    abox((c1, i0), (c2, i0), (c3, i0)),
+                    abox((c1, i0), (c2, i0), (c4, i0))
                     ])
     assert aboxes is None
 
@@ -114,7 +134,7 @@ def test_exists_candidates_no_roles():
     g = Generator(MockGuide([]))
     c0 = g._new_class()
     i0 = g._new_individual()
-    candidates = g._exists_candidates([ABox({CAssertion(c0, i0)}, set(), set(), set())])
+    candidates = g._exists_candidates([abox((c0, i0))])
     assert len(candidates) == 0
 
 
@@ -124,7 +144,7 @@ def test_exists_candidates1():
     i0 = g._new_individual()
     i1 = g._new_individual()
     r0 = g._new_role()
-    candidates = g._exists_candidates([ABox({CAssertion(c0, i0), CAssertion(c0, i1)}, set(), set(), set())])
+    candidates = g._exists_candidates([abox((c0, i0), (c0, i1))])
     assert candidates == [(c0, r0)]
 
 
@@ -135,7 +155,7 @@ def test_exists_candidates2():
     i0 = g._new_individual()
     i1 = g._new_individual()
     r0 = g._new_role()
-    candidates = g._exists_candidates([ABox({CAssertion(c0, i0), CAssertion(c1, i1)}, set(), set(), set())])
+    candidates = g._exists_candidates([abox((c0, i0), (c1, i1))])
     assert candidates == [(c0, r0), (c1, r0)]
 
 
@@ -147,8 +167,7 @@ def test_exists_candidates3():
     i1 = g._new_individual()
     r0 = g._new_role()
     r1 = g._new_role()
-    candidates = g._exists_candidates(
-        [ABox({CAssertion(c0, i0), CAssertion(c1, i1)}, set(), set(), {PartialRAssertion(r1, i1)})])
+    candidates = g._exists_candidates([abox((c0, i0), (c1, i1), (r1, i1, None))])
     assert candidates == [(c0, r0), (c0, r1), (c1, r0)]
 
 
@@ -157,19 +176,11 @@ def test_exists_new_role():
     c0 = g._new_class()
     c1 = g._new_class()
     i0 = g._new_individual()
-    aboxes = g._exists([ABox({CAssertion(c0, i0), CAssertion(c1, i0)}, set(), set(), set()),
-                        ABox({CAssertion(c1, i0)}, set(), set(), set())]
-                       )
+    aboxes = g._exists([abox((c0, i0), (c1, i0)), abox((c1, i0))])
     assert g.n_roles == 1
     assert len(aboxes) == 2
-    assert aboxes[0].c_assertions == {CAssertion(2, 1), CAssertion(c1, i0)}
-    assert aboxes[0].r_assertions == {RAssertion(0, 0, 1)}
-    assert aboxes[0].fresh == {CAssertion(2, 1)}
-    assert len(aboxes[0].forbidden) == 0
-    assert aboxes[1].c_assertions == {CAssertion(c1, i0)}
-    assert len(aboxes[1].r_assertions) == 0
-    assert len(aboxes[1].fresh) == 0
-    assert len(aboxes[1].forbidden) == 0
+    assert aboxes[0] == abox((2, 1), '*', (c1, i0), (0, 0, 1))
+    assert aboxes[1] == abox((c1, i0))
     assert g._definitions[0] == (ANY, 0, 2)
 
 
@@ -180,14 +191,10 @@ def test_exists_existing_role():
     i0 = g._new_individual()
     i1 = g._new_individual()
     r0 = g._new_role()
-    aboxes = g._exists(
-        [ABox({CAssertion(c0, i0), CAssertion(c1, i1)}, {RAssertion(r0, i0, i1)}, set(), {PartialRAssertion(r0, i0)})]
-    )
+    aboxes = g._exists([abox((c0, i0), (c1, i1), (r0, i0, i1), (r0, i0, None))])
     assert g.n_roles == 1
     assert len(aboxes) == 1
-    assert aboxes[0].c_assertions == {CAssertion(2, 2), CAssertion(c0, i0)}
-    assert aboxes[0].r_assertions == {RAssertion(r0, i0, i1), RAssertion(0, 1, 2)}
-    assert aboxes[0].fresh == {CAssertion(2, 2)}
+    assert aboxes[0] == abox((2, 2), '*', (c0, i0), (r0, i0, i1), (r0, i1, 2), (r0, i0, None))
     assert g._definitions[1] == (ANY, r0, 2)
 
 # def test_nothing():
