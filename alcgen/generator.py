@@ -1,15 +1,17 @@
 import itertools
 from collections import defaultdict
-from collections.abc import Sequence
 from dataclasses import dataclass
 from itertools import chain
-from typing import TypeVar
 
 import numpy as np
 
-from alcgen.aux import insert_maximal
+from alcgen.aux import insert_maximal, intersection
+from alcgen.guide import Guide
+from alcgen.random_guide import RandomGuide
 from alcgen.syntax import CE, AND, OR, NOT, ALL, ANY, to_pretty, BOT, TOP, to_manchester, eq, rename
 
+
+# TODO controllabel distance between the clashing variables
 
 @dataclass(frozen=True)
 class CAssertion:
@@ -57,54 +59,8 @@ class ABox:
         return repr(self)
 
 
-T = TypeVar('T')
-
-
-class Guide:
-    def __init__(self):
-        self.ctr = 0
-
-    def _select(self, items: list[T]) -> T:
-        return min(items)
-
-    def select_class(self, classes: list[int]) -> int:
-        return self._select(classes)
-
-    def select_role(self, roles: list[int]) -> int:
-        return self._select(roles)
-
-    def select_class_role_pair(self, ar: list[tuple[int, int]]):
-        return self._select(ar)
-
-    def rule(self, n_rules: int) -> Sequence[int]:
-        r = list(range(n_rules))
-        r = r[self.ctr + 1:] + r[:self.ctr]
-        self.ctr += 1
-        return r
-
-    def steps(self) -> int:
-        return 5
-
-
-class RandomGuide(Guide):
-    def __init__(self, gen: np.random.Generator, min_steps: int, max_steps: int):
-        super().__init__()
-        self._gen = gen
-        self._min_steps = min_steps
-        self._max_steps = max_steps
-
-    def _select(self, items: list[T]) -> T:
-        return self._gen.choice(items)
-
-    def rule(self, n_rules: int) -> Sequence[int]:
-        return self._gen.permutation(n_rules)
-
-    def steps(self) -> int:
-        return self._gen.integers(self._min_steps, self._max_steps)
-
-
-class Generator3:
-    definitions: list[CE | None]
+class Generator:
+    _definitions: list[CE | None]
     _different: set[tuple[int, int]]
     _blocked: list[bool]
 
@@ -112,21 +68,21 @@ class Generator3:
         self.gen = gen
         self.n_roles = 0
         self.n_individuals = 0
-        self.definitions = []
+        self._definitions = []
         self._different = set()
         self._blocked = []
 
     def _reset(self):
         self.n_roles = 0
         self.n_individuals = 0
-        self.definitions.clear()
+        self._definitions.clear()
         self._different.clear()
         self._blocked.clear()
 
     def _new_class(self) -> int:
-        self.definitions.append(None)
+        self._definitions.append(None)
         self._blocked.append(False)
-        return len(self.definitions) - 1
+        return len(self._definitions) - 1
 
     def _new_individual(self) -> int:
         i = self.n_individuals
@@ -139,18 +95,17 @@ class Generator3:
         return i
 
     def _atomic_classes(self, blocked: bool) -> list[int]:
-        return [i for i, c in enumerate(self.definitions) if c is None and (blocked or not self._blocked[i])]
+        return [i for i, c in enumerate(self._definitions) if c is None and (blocked or not self._blocked[i])]
 
     def _define(self, a: int, def_: CE):
-        assert self.definitions[a] is None
-        # print(a, ":=", to_pretty(def_))
-        self.definitions[a] = def_
+        assert self._definitions[a] is None
+        self._definitions[a] = def_
 
     def _undefine(self, a: int):
-        self.definitions[a] = None
+        self._definitions[a] = None
 
     def _is_atomic(self, a: int) -> bool:
-        return self.definitions[a] is None
+        return self._definitions[a] is None
 
     def _and(self, aboxes: list[ABox], a: int | None = None) -> list[ABox] | None:
         if a is None:
@@ -176,12 +131,6 @@ class Generator3:
         return result
 
     def _or(self, aboxes: list[ABox], a: int | None = None) -> list[ABox] | None:
-        def intersection(sets: list[set]) -> set:
-            assert len(sets) >= 1
-            if len(sets) == 1:
-                return sets[0]
-            return set(sets[0]).intersection(*sets[1:])
-
         if a is None:
             candidates = []
             for c in self._atomic_classes(True):
@@ -195,7 +144,6 @@ class Generator3:
                 if any(len(intersection(p)) >= 2 * len(relevant) for p in itertools.product(*abox_classes)):
                     candidates.append(c)
 
-            # print(candidates)
             if len(candidates) == 0:
                 return None
             a = self.gen.select_class(candidates)
@@ -361,7 +309,7 @@ class Generator3:
         elif ce == TOP or ce == BOT:
             return ce
         else:
-            d = self.definitions[ce]
+            d = self._definitions[ce]
             if d is None:
                 return ce
             else:
@@ -405,7 +353,7 @@ class Generator3:
         for abox in aboxes:
             result.append([])
             for ca in abox.fresh:
-                assert self._is_atomic(ca.c), f"{ca.c} is fresh, but defined as {self.definitions[ca.c]}"
+                assert self._is_atomic(ca.c), f"{ca.c} is fresh, but defined as {self._definitions[ca.c]}"
                 for cb in abox.c_assertions:
                     # this does not guarantee that a variable is always defined or definer - it may vary
                     if ca != cb and ca.i == cb.i and (ca.c < cb.c or cb not in abox.fresh):
@@ -470,8 +418,6 @@ class Generator3:
         else:
             return any(self._depends_on(c, b) for c in d[1:])
 
-    # TODO controllabel distance between the clashing variables
-
     def _close(self, aboxes: list[ABox]) -> bool:
         def helper(idx: int, order: list[int]) -> bool:
             if idx == len(order):
@@ -481,44 +427,13 @@ class Generator3:
             if self._is_closed(abox):
                 return helper(idx + 1, order)
             for a, b in pairs:
-                if self.definitions[a] is not None:
+                if self._definitions[a] is not None:
                     continue
                 self._define(a, (NOT, b))
                 if self._check_different() and helper(idx + 1, order):
                     return True
                 self._undefine(a)
-            # print("Retract", idx)
             return False
-
-        def helper2(idx: int, order: list[int]) -> bool:
-            stack = [(0, [])]
-            while len(stack) > 0:
-                idx, definitions = stack.pop()
-                for x, y in definitions:
-                    self._define(x, y)
-                if self._check_different():
-                    while idx < len(order) and self._is_closed(aboxes[order[idx]]):
-                        idx += 1
-                    if idx >= len(order):
-                        return True
-                    print(f"{idx}/{len(order)}", definitions, all_pairs[order[idx]])
-                    for a, b in all_pairs[order[idx]]:
-                        if self.definitions[a] is None and not self._depends_on(self.definitions[b], a):
-                            stack.append((idx + 1, definitions + [(a, (NOT, b))]))
-                        if self.definitions[b] is None and not self._depends_on(self.definitions[a], b):
-                            stack.append((idx + 1, definitions + [(b, (NOT, a))]))
-                        if self.definitions[a] == (NOT, b) or self.definitions[b] == (NOT, a):
-                            stack.append((idx + 1, definitions))
-                for x, y in definitions:
-                    self._undefine(x)
-            return False
-
-        def blah(order):
-            tmp = defaultdict(set)
-            for idx in order:
-                for a, b in all_pairs[idx]:
-                    tmp[a].add(b)
-            print(tmp)
 
         assert self._check_different()
         all_pairs = self._pairs(aboxes)
@@ -534,10 +449,10 @@ class Generator3:
         return True
 
     def _expand_different(self, a: int, b: int) -> set:
-        if self.definitions[a] is not None:
-            a = self.definitions[a]
-        if self.definitions[b] is not None:
-            b = self.definitions[b]
+        if self._definitions[a] is not None:
+            a = self._definitions[a]
+        if self._definitions[b] is not None:
+            b = self._definitions[b]
         if isinstance(a, int) and isinstance(b, int):
             return {frozenset([a, b])}
         elif isinstance(a, tuple) and isinstance(b, tuple) and a[0] == b[0]:
@@ -613,7 +528,7 @@ class Generator3:
 def main():
     for i in range(0, 1):
         print(f"i={i}")
-        result = Generator3(RandomGuide(np.random.default_rng(0xfeed + 17 * i), 1000, 1001)).run()
+        result = Generator(RandomGuide(np.random.default_rng(0xfeed + 17 * i), 100, 101)).run()
         print(to_pretty(result))
         with open("/tmp/a.owl", "wt") as f:
             to_manchester(result, "http://example.com/foo", f)
