@@ -1,5 +1,6 @@
 import itertools
 from collections import defaultdict
+from typing import Collection
 
 import numpy as np
 
@@ -8,6 +9,48 @@ from alcgen.aux import insert_maximal, intersection, has_non_empty_intersection
 from alcgen.guide import Guide
 from alcgen.random_guide import RandomGuide
 from alcgen.syntax import CE, AND, OR, NOT, ALL, ANY, to_pretty, BOT, TOP, to_manchester, eq, rename, nnf
+
+
+def _find_subproblems(all_pairs: list[Collection[tuple[int, int]]], different: Collection[tuple[int, int]]) -> \
+        list[set[int]]:
+    """
+    Returns separate subproblems for the problem of closing aboxes.
+    :param all_pairs: A collection of collections of pairs, each collection corresponds to an abox, each pair corresponds to a pair of variables that can be used to close the said abox.
+    :param different: Pairs of values that must be different, i.e., any time one of them is in a subproblem, the other must be there as well to maintain correctness.
+    :return: Indices of aboxes in all_pairs that must be considered jointly
+    """
+    diff = defaultdict(list)
+    for a, b in different:
+        diff[a].append(b)
+        diff[b].append(a)
+    class_to_idx = defaultdict(set)
+    idx_to_class = [set() for _ in range(len(all_pairs))]
+    for i, pairs in enumerate(all_pairs):
+        for p in pairs:
+            for x in p:
+                class_to_idx[x].add(i)
+                idx_to_class[i].add(x)
+                idx_to_class[i].update(diff[x])
+                for b in diff[x]:
+                    class_to_idx[b].add(i)
+    visited = set()
+    result = []
+    for idx in range(len(all_pairs)):
+        if idx in visited:
+            continue
+        indices = {idx}
+        new_classes = set(idx_to_class[idx])
+        classes = set()
+        while True:
+            new_indices = set(itertools.chain(*[class_to_idx[i] for i in new_classes])) - indices
+            if len(new_indices) == 0:
+                break
+            classes.update(new_classes)
+            new_classes = set(itertools.chain(*[idx_to_class[i] for i in new_indices])) - classes
+            indices.update(new_indices)
+        visited |= indices
+        result.append(indices)
+    return result
 
 
 # TODO controllabel distance between the clashing variables
@@ -303,21 +346,25 @@ class Generator:
                     return result
             return None
 
-    def _pairs(self, aboxes: list[ABox]) -> list[list[tuple[int, int]]]:
-        result = []
-        for abox in aboxes:
-            result.append([])
-            for ca in abox.fresh:
-                assert self._is_atomic(ca.c), f"{ca.c} is fresh, but defined as {self._definitions[ca.c]}"
-                for cb in abox.c_assertions:
-                    # this does not guarantee that a variable is always defined or definer - it may vary
-                    if ca != cb and ca.i == cb.i and (ca.c < cb.c or cb not in abox.fresh):
-                        result[-1].append((ca.c, cb.c))
+    def _abox_pairs(self, abox: ABox) -> set[tuple[int, int]]:
+        result = set()
+        for ca in abox.fresh:
+            assert self._is_atomic(ca.c), f"{ca.c} is fresh, but defined as {self._definitions[ca.c]}"
+            for cb in abox.classes_of_individual(ca.i):
+                # the first variable is always fresh
+                if ca.c != cb and (cb, ca.c) not in result:
+                    result.add((ca.c, cb))
         return result
+
+    def _pairs(self, aboxes: list[ABox]) -> list[set[tuple[int, int]]]:
+        return [self._abox_pairs(abox) for abox in aboxes]
 
     def _check_different(self) -> bool:
         for a, b in self._different:
-            if eq(self._expand(a), self._expand(b)) or eq(self._expand(a), self._expand((NOT, b))):
+            a = self._expand(a)
+            b = self._expand(b)
+            # eq transforms to nnf internally so its fine to expand once
+            if eq(a, b) or eq(a, (NOT, b)):
                 return False
         return True
 
@@ -330,36 +377,7 @@ class Generator:
         return False
 
     def _find_subproblems(self, all_pairs: list[list[tuple[int, int]]]) -> list[set[int]]:
-        class_to_idx = defaultdict(set)
-        idx_to_class = [set() for _ in range(len(all_pairs))]
-        for i, pairs in enumerate(all_pairs):
-            for p in pairs:
-                for x in p:
-                    class_to_idx[x].add(i)
-                    idx_to_class[i].add(x)
-                    for a, b in self._different:
-                        if a == x:
-                            class_to_idx[b].add(i)
-                            idx_to_class[i].add(b)
-                        elif b == x:
-                            class_to_idx[a].add(i)
-                            idx_to_class[i].add(a)
-        visited = set()
-        result = []
-        for idx in range(len(all_pairs)):
-            if idx in visited:
-                continue
-            indices = {idx}
-            while True:
-                # TODO this is not particularly effective
-                classes = set(itertools.chain(*[idx_to_class[i] for i in indices]))
-                new_indices = set(itertools.chain(*[class_to_idx[i] for i in classes]))
-                if new_indices == indices:
-                    break
-                indices = new_indices
-            visited |= indices
-            result.append(indices)
-        return result
+        return _find_subproblems(all_pairs, self._different)
 
     def _depends_on(self, d: CE | None, b: int) -> bool:
         if d is None:

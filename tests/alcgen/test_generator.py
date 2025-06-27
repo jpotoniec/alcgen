@@ -1,7 +1,7 @@
 from typing import Sequence, TypeVar
 
 from alcgen.abox import PartialRAssertion, RAssertion
-from alcgen.generator import Generator, CAssertion, ABox
+from alcgen.generator import Generator, CAssertion, ABox, _find_subproblems
 from alcgen.guide import Guide
 from alcgen.syntax import ANY, NOT, TOP, BOT, AND, ALL
 
@@ -318,6 +318,38 @@ def test_is_closed():
     g._define(c1, (NOT, c0))
     assert g._is_closed(abox((c0, i0), (c1, i0), '*'))
     assert not g._is_closed(abox((c0, i0), (c1, i1), '*'))
+
+
+def test_abox_pairs():
+    g = Generator(MockGuide([]))
+    c0 = g._new_class()
+    c1 = g._new_class()
+    i0 = g._new_individual()
+    i1 = g._new_individual()
+    assert g._abox_pairs(abox((c0, i0), (c1, i0), '*')) == {(c1, c0)}
+    assert g._abox_pairs(abox((c0, i0), (c1, i0))) == set()
+    assert g._abox_pairs(abox((c0, i0), '*', (c1, i0), '*')) in [{(c0, c1)}, {(c1, c0)}]
+    assert g._abox_pairs(abox((c0, i0), '*', (c1, i1), '*')) == set()
+    assert g._abox_pairs(abox((c0, i0), '*', (c1, i0), '*', (c0, i1), '*', (c1, i1), '*')) in [{(c0, c1)}, {(c1, c0)}]
+
+
+def test_check_different():
+    g = Generator(MockGuide([]))
+    c0 = g._new_class()
+    c1 = g._new_class()
+    g._define(c0, (NOT, c1))
+    assert g._check_different()
+    g._different.add((c1, c0))
+    assert not g._check_different()
+
+
+def test_find_subproblems():
+    assert _find_subproblems([[(1, 2), (1, 3)], [(4, 5), (6, 7)]], []) == [{0}, {1}]
+    assert _find_subproblems([[(1, 2), (1, 3)], [(4, 5), (6, 7)]], [(3, 4)]) == [{0, 1}]
+    assert _find_subproblems([[(1, 2)], [(3, 4)], [(5, 6)], [(7, 8)]], []) == [{0}, {1}, {2}, {3}]
+    assert _find_subproblems([[(1, 2)], [(3, 4)], [(5, 6)], [(7, 8)]], [(2, 3)]) == [{0, 1}, {2}, {3}]
+    assert _find_subproblems([[(1, 2)], [(3, 4)], [(5, 6)], [(7, 8)]], [(2, 3), (4, 5)]) == [{0, 1, 2}, {3}]
+    assert _find_subproblems([[(1, 2)], [(3, 4)], [(5, 6)], [(7, 8)]], [(3, 2), (5, 4), (7, 6)]) == [{0, 1, 2, 3}]
 
 # def test_nothing():
 #     ce = Generator(MockGuide([], 3)).run(True)
