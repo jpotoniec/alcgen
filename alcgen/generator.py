@@ -137,15 +137,32 @@ class Generator:
             if len(abox_classes) == 0:
                 continue
             th = 2 * len(relevant)
-            if len(set(itertools.chain(*itertools.chain(*abox_classes)))) < th:
+            all_classes = set(itertools.chain(*itertools.chain(*abox_classes)))
+            if len(all_classes) < th:
+                continue
+            different = []
+            for d in self._different:
+                d = set(d)
+                if not (d <= all_classes):
+                    continue
+                if all(len(s & d) == 0 or d <= s for s in itertools.chain(*abox_classes)):
+                    m = max(d)
+                    all_classes.remove(m)
+                    if len(all_classes) < th:
+                        break
+                    for classes_list in abox_classes:
+                        for classes in classes_list:
+                            if m in classes:
+                                classes.remove(m)
+                elif any(d <= s for s in itertools.chain(*abox_classes)):
+                    different.append(d)
+            if len(all_classes) < th:
                 continue
             for p in itertools.product(*abox_classes):
                 common = intersection(p)
                 if len(common) < th:
                     continue
-                # TODO this can be optimized
-                for d in self._different:
-                    d = set(d)
+                for d in different:
                     if d <= common:
                         common.remove(max(d))
                         if len(common) < th:
