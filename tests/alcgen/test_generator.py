@@ -1,9 +1,12 @@
 from typing import Sequence, TypeVar
 
+import numpy as np
+
 from alcgen.abox import PartialRAssertion, RAssertion
 from alcgen.generator import Generator, CAssertion, ABox, _find_subproblems
 from alcgen.guide import Guide
-from alcgen.syntax import ANY, NOT, TOP, BOT, AND, ALL
+from alcgen.random_guide import RandomGuide
+from alcgen.syntax import ANY, NOT, TOP, BOT, AND, ALL, CE, OR
 
 _T = TypeVar('_T')
 
@@ -350,6 +353,23 @@ def test_find_subproblems():
     assert _find_subproblems([[(1, 2)], [(3, 4)], [(5, 6)], [(7, 8)]], [(2, 3)]) == [{0, 1}, {2}, {3}]
     assert _find_subproblems([[(1, 2)], [(3, 4)], [(5, 6)], [(7, 8)]], [(2, 3), (4, 5)]) == [{0, 1, 2}, {3}]
     assert _find_subproblems([[(1, 2)], [(3, 4)], [(5, 6)], [(7, 8)]], [(3, 2), (5, 4), (7, 6)]) == [{0, 1, 2, 3}]
+
+
+def test_bruteforce():
+    def ops(ce: CE) -> set[int]:
+        if isinstance(ce, tuple):
+            result = {ce[0]}
+            for child in ce[1:]:
+                result |= ops(child)
+            return result
+        else:
+            return set()
+
+    all_ops = set()
+    for i in range(0, 200):
+        result = Generator(RandomGuide(np.random.default_rng(0xfeed + 17 * i), 10, 200)).run()
+        all_ops |= ops(result)
+    assert all_ops == {AND, OR, ANY, ALL, NOT}
 
 # def test_nothing():
 #     ce = Generator(MockGuide([], 3)).run(True)

@@ -1,14 +1,12 @@
+import functools
 import itertools
 from collections import defaultdict
 from typing import Collection
 
-import numpy as np
-
 from alcgen.abox import CAssertion, RAssertion, ABox, PartialRAssertion
 from alcgen.aux import insert_maximal, intersection, has_non_empty_intersection
 from alcgen.guide import Guide
-from alcgen.random_guide import RandomGuide
-from alcgen.syntax import CE, AND, OR, NOT, ALL, ANY, to_pretty, BOT, TOP, to_manchester, eq, rename, nnf
+from alcgen.syntax import CE, AND, OR, NOT, ALL, ANY, BOT, TOP, eq, rename, nnf
 
 
 def _find_subproblems(all_pairs: list[Collection[tuple[int, int]]], different: Collection[tuple[int, int]]) -> \
@@ -105,8 +103,11 @@ class Generator:
         return self._definitions[a] is None
 
     def _and(self, aboxes: list[ABox], a: int | None = None) -> list[ABox] | None:
+        candidates = self._atomic_classes(False)
         if a is None:
-            a = self.gen.select_class(self._atomic_classes(False))
+            a = self.gen.select_class(candidates)
+        else:
+            assert a in candidates
         b = self._new_class()
         c = self._new_class()
         self._define(a, (AND, b, c))
@@ -127,23 +128,41 @@ class Generator:
                 result.append(abox)
         return result
 
-    def _or(self, aboxes: list[ABox], a: int | None = None) -> list[ABox] | None:
-        if a is None:
-            candidates = []
-            for c in self._atomic_classes(True):
-                relevant = [abox for abox in aboxes if abox.has_class(c)]
-                abox_classes = [[abox.classes_of_individual(i) - {c} for i in abox.individuals_of_class(c)] for abox in
-                                relevant]
-                if len(abox_classes) == 0:
+    def _or_candidates(self, aboxes: list[ABox]) -> list[int]:
+        candidates = []
+        for c in self._atomic_classes(True):
+            relevant = [abox for abox in aboxes if abox.has_class(c)]
+            abox_classes = [[abox.classes_of_individual(i) - {c} for i in abox.individuals_of_class(c)] for abox in
+                            relevant]
+            if len(abox_classes) == 0:
+                continue
+            th = 2 * len(relevant)
+            if len(set(itertools.chain(*itertools.chain(*abox_classes)))) < th:
+                continue
+            for p in itertools.product(*abox_classes):
+                common = intersection(p)
+                if len(common) < th:
                     continue
-                if len(set(itertools.chain(*itertools.chain(*abox_classes)))) < 2 * len(relevant):
-                    continue
-                if any(len(intersection(p)) >= 2 * len(relevant) for p in itertools.product(*abox_classes)):
+                # TODO this can be optimized
+                for d in self._different:
+                    d = set(d)
+                    if d <= common:
+                        common.remove(max(d))
+                        if len(common) < th:
+                            break
+                if len(common) >= th:
                     candidates.append(c)
+                    break
+        return candidates
 
-            if len(candidates) == 0:
-                return None
+    def _or(self, aboxes: list[ABox], a: int | None = None) -> list[ABox] | None:
+        candidates = self._or_candidates(aboxes)
+        if len(candidates) == 0:
+            return None
+        if a is None:
             a = self.gen.select_class(candidates)
+        else:
+            assert a in candidates
         for o in self._atomic_classes(False):
             if o != a:
                 self._blocked[o] = True
@@ -184,12 +203,20 @@ class Generator:
                            not has_non_empty_intersection(forbidden_r2i[r], a_inds)]
         return candidates
 
-    def _exists(self, aboxes: list[ABox]) -> list[ABox] | None:
+    def _exists(self, aboxes: list[ABox], a: int | None = None, r: int | None = None) -> list[ABox] | None:
         candidates = self._exists_candidates(aboxes)
+        if r is not None:
+            candidates = [c for c in candidates if c[1] == r and (a is None or c[0] == a)]
+            if len(candidates) == 0:
+                return None
         if len(candidates) > 0:
             a, r = self.gen.select_class_role_pair(candidates)
         else:
-            a = self.gen.select_class(self._atomic_classes(False))
+            candidates = self._atomic_classes(False)
+            if a is None:
+                a = self.gen.select_class(candidates)
+            else:
+                assert a in candidates
             r = self._new_role()
         # reusing an existing class makes no sense since it will be a new individual anyhow
         b = self._new_class()
@@ -266,11 +293,13 @@ class Generator:
                     ar.append(key)
         return ar
 
-    def _forall(self, aboxes: list[ABox]) -> list[ABox] | None:
-        ar = self._forall_candidates(aboxes)
-        if len(ar) == 0:
+    def _forall(self, aboxes: list[ABox], a: int | None = None, r: int | None = None) -> list[ABox] | None:
+        candidates = self._forall_candidates(aboxes)
+        if a is not None or r is not None:
+            candidates = [ar for ar in candidates if (a is None or ar[0] == a) and (r is None or ar[1] == r)]
+        if len(candidates) == 0:
             return None
-        a, r = self.gen.select_class_role_pair(ar)
+        a, r = self.gen.select_class_role_pair(candidates)
         b = self._new_class()
         self._define(a, (ALL, r, b))
         result = []
@@ -359,10 +388,16 @@ class Generator:
     def _pairs(self, aboxes: list[ABox]) -> list[set[tuple[int, int]]]:
         return [self._abox_pairs(abox) for abox in aboxes]
 
-    def _check_different(self) -> bool:
+    def _check_different(self, filter: set[int] | None = None) -> bool:
+        @functools.cache
+        def expand(c):
+            return self._expand(c)
+
         for a, b in self._different:
-            a = self._expand(a)
-            b = self._expand(b)
+            if filter is not None and a not in filter and b not in filter:
+                continue
+            a = expand(a)
+            b = expand(b)
             # eq transforms to nnf internally so its fine to expand once
             if eq(a, b) or eq(a, (NOT, b)):
                 return False
@@ -403,7 +438,7 @@ class Generator:
                 if self._definitions[a] is not None:
                     continue
                 self._define(a, (NOT, b))
-                if self._check_different() and helper(idx + 1, order):
+                if self._check_different({a, b}) and helper(idx + 1, order):
                     return True
                 self._undefine(a)
             return False
@@ -414,10 +449,12 @@ class Generator:
             order = sorted(subproblem, key=lambda p: len(all_pairs[p]))
             if not helper(0, order):
                 cls = set(itertools.chain(*itertools.chain(*[all_pairs[i] for i in order])))
+                print()
                 print(self._different)
                 print(cls)
                 print([self._blocked[c] for c in cls])
-                print(*[abox for abox in aboxes if any(ca.c in cls for ca in abox.c_assertions)], sep='\n')
+                print(*[all_pairs[p] for p in order])
+                print(*[abox for abox in aboxes if any(ca.c in cls for ca in abox.fresh)], sep='\n')
                 return False
         return True
 
@@ -496,17 +533,3 @@ class Generator:
             return self.minimized(current)
         else:
             return self._expand(0)
-
-
-def main():
-    for i in range(0, 1):
-        print(f"i={i}")
-        result = Generator(RandomGuide(np.random.default_rng(0xfeed + 17 * i), 100, 101)).run()
-        print(to_pretty(result))
-        with open("/tmp/a.owl", "wt") as f:
-            to_manchester(result, "http://example.com/foo", f)
-        print()
-
-
-if __name__ == '__main__':
-    main()
