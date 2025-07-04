@@ -3,9 +3,12 @@ import itertools
 from collections import defaultdict
 from typing import Collection
 
+import numpy as np
+
 from alcgen.abox import CAssertion, RAssertion, ABox, PartialRAssertion
 from alcgen.aux import insert_maximal, intersection, has_non_empty_intersection
 from alcgen.guide import Guide
+from alcgen.random_guide import RandomGuide
 from alcgen.syntax import CE, AND, OR, NOT, ALL, ANY, BOT, TOP, eq, rename, nnf
 
 
@@ -21,11 +24,17 @@ def _find_subproblems(all_pairs: list[Collection[tuple[int, int]]], different: C
     for a, b in different:
         diff[a].append(b)
         diff[b].append(a)
+    lhs = set()
+    for pairs in all_pairs:
+        for p, _ in pairs:
+            lhs.add(p)
+            if p in diff:
+                lhs |= set(diff[p])
     class_to_idx = defaultdict(set)
     idx_to_class = [set() for _ in range(len(all_pairs))]
     for i, pairs in enumerate(all_pairs):
         for p in pairs:
-            for x in p:
+            for x in set(p) & lhs:
                 class_to_idx[x].add(i)
                 idx_to_class[i].add(x)
                 idx_to_class[i].update(diff[x])
@@ -455,7 +464,7 @@ class Generator:
                 if self._definitions[a] is not None:
                     continue
                 self._define(a, (NOT, b))
-                if self._check_different({a, b}) and helper(idx + 1, order):
+                if self._check_different() and helper(idx + 1, order):
                     return True
                 self._undefine(a)
             return False
@@ -529,12 +538,14 @@ class Generator:
             mapping[k] = i
         return rename(self._expand(0), mapping)
 
-    def run(self, minimize: bool = True) -> CE:
+    def run(self, steps: int | None = None, minimize: bool = True) -> CE:
         self._reset()
         c = self._new_class()
         i = self._new_individual()
         current = [ABox(frozenset({CAssertion(c, i)}), frozenset(), frozenset(), frozenset())]
-        for _ in range(self.gen.steps()):
+        if steps is None:
+            steps = self.gen.steps()
+        for _ in range(steps):
             n = self.step(current)
             if n is None:
                 break
@@ -546,6 +557,7 @@ class Generator:
             current = n
         closed = self._close(current)
         assert closed
+        assert self._check_different()
         if minimize:
             return self.minimized(current)
         else:
