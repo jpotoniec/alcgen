@@ -70,6 +70,12 @@ def closing_mapping(leafs) -> dict[int, CE]:
                     best = l
                     if used[best] == 0:
                         break
+            if best is None:
+                for l in leaf - {atom}:
+                    if best is None or used[best] > used[l]:
+                        best = l
+                        if used[best] == 0:
+                            break
             assert best is not None
             used[best] += 1
             mapping[atom] = -best

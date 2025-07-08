@@ -49,10 +49,10 @@ def test_no_disjuncts(d: int):
 
 
 @pytest.mark.parametrize("d", range(0, 6))
-def test_no_conjuncts(d: int):
+def test_one_conjunct(d: int):
     class MyGuide(BaselineGuide):
         def n_conjuncts(self, depth: int, universal: bool) -> int:
-            return 0
+            return 1
 
     ce = generate(d, MyGuide(), True, True)
     assert ce is not None
