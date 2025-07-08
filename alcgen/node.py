@@ -1,14 +1,7 @@
-import copy
 import itertools
-from collections import defaultdict, Counter
-from typing import Collection
+from collections import defaultdict
 
-import numpy as np
-
-from alcgen.syntax import CE, AND, ANY, OR, TOP, to_pretty, ALL, NOT, to_manchester
-
-Model = list[int | tuple[int, "Model"]]
-
+from alcgen.syntax import CE, AND, ANY, OR, TOP, to_pretty, ALL, NOT
 
 
 class Node:
@@ -90,22 +83,6 @@ class Node:
                 for n in unodes:
                     enode.link(n)
 
-    def merge_with(self, other: "Node") -> None:
-        """
-        Modifies self so it contains all the entries of other
-        """
-        print("M", self.debug(), "<-", other.debug())
-        for c in other.conjuncts:
-            self.add_conjunct(c)
-        for d in other.disjuncts:
-            self.add_disjunct(copy.deepcopy(d))
-        for r, nodes in other.existential.items():
-            for n in nodes:
-                self.add_existential(r, copy.deepcopy(n))
-        for r, nodes in other.universal.items():
-            for n in nodes:
-                self.add_universal(r, copy.deepcopy(n))
-
     def debug(self) -> str:
         return to_pretty(self.to_ce())
 
@@ -141,20 +118,6 @@ class Node:
             for r, nodes in node.all_universal.items():
                 result[r].extend(nodes)
         return result
-
-    def models(self) -> list[Model]:
-        atoms = list(self.all_conjuncts)
-        disjuncts = self.all_disjuncts
-        if len(disjuncts) > 0:
-            prod = [[atoms + m for d in self.all_disjuncts for m in d.models()]]
-        else:
-            prod = [[atoms]]
-        existential = self.all_existential.items()
-        if len(existential) > 0:
-            for r, nodes in existential:
-                for n in nodes:
-                    prod.append([[(r, m)] for m in n.models()])
-        return [list(itertools.chain(*p)) for p in itertools.product(*prod)]
 
     def leafs(self, shared: set | None = None, linked: set | None = None) -> tuple[
         int, list[tuple[set[int], set[int], set[int]]]]:

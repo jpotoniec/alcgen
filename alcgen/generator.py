@@ -1,11 +1,8 @@
 import itertools
 from collections import defaultdict, Counter
 
-import numpy as np
-
 from .guide import Guide
 from .node import Node
-from .random_guide import RandomGuide
 from .syntax import CE, AND, OR
 
 
@@ -119,40 +116,5 @@ def generate(depth: int, guide: Guide, close: bool, minimize: bool, ce: bool = T
     else:
         return n
 
-
 # TODO verify that it works as intended
 # TODO optimize
-
-def main():
-    for depth in range(1, 10):
-        for i in range(100):
-            print(depth, i)
-            guide = RandomGuide(np.random.default_rng(0xfeed * i + 0xbad * depth))
-            generate(depth, guide, True, True)
-    # guide = RandomGuide(np.random.default_rng(0xfeed))
-    # n = Generator().generate(2, guide)
-    # print(n.debug())
-    # print("========")
-    # leafs = n.leafs()
-    # print(*leafs, sep='\n')
-    # mapping = closing_mapping(leafs)
-    # print(mapping)
-    # n.apply_mapping(mapping)
-    # print(n.debug())
-    # print("========")
-    # symbols = n.symbols()
-    # print(symbols)
-    # print("========")
-    # mapping = minimizing_mapping(symbols)
-    # print(mapping)
-    # n.apply_mapping(mapping)
-    # print(*n.leafs(), sep='\n')
-    # print("========")
-    # ce = n.to_ce()
-    # print(to_pretty(ce))
-    # with open("/tmp/a.owl", "wt") as f:
-    #     to_manchester(ce, "http://example.com/foo", f)
-
-
-if __name__ == "__main__":
-    main()

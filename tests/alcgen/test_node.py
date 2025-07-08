@@ -11,18 +11,6 @@ def test_to_ce():
     assert l.to_ce() == (OR, 5, 6)
 
 
-def test_merge_conjuncts1():
-    n = Node(1)
-    n.merge_with(Node(2))
-    assert n.conjuncts == {1, 2}
-
-
-def test_merge_conjuncts2():
-    n = Node(1, 2)
-    n.merge_with(Node(1, 3))
-    assert n.conjuncts == {1, 2, 3}
-
-
 def test_universal1():
     n = Node((1, Node(1)))
     n.add_universal(1, Node(2))
@@ -65,59 +53,6 @@ def test_all_conjuncts2():
     assert b1.all_conjuncts == {4, 5}
     c1 = next(iter(b1.existential[1]))
     assert c1.all_conjuncts == {3, 6}
-
-
-def test_models1():
-    n = Node(1, 2)
-    assert n.models() == [[1, 2]]
-
-
-def test_models2():
-    n = Node(1, 2)
-    n.add_disjunct(Node(3))
-    n.add_disjunct(Node(4))
-    n.add_disjunct(Node(5))
-    assert n.models() == [[1, 2, 3], [1, 2, 4], [1, 2, 5]]
-
-
-def test_models3():
-    a = Node()
-    a.add_disjunct(Node(1))
-    a.add_disjunct(Node(2))
-    b = Node()
-    b.add_disjunct(Node(3))
-    b.add_disjunct(Node(4))
-    c = Node((1, a), (1, b))
-    assert c.models() == [[(1, [1]), (1, [3])],
-                          [(1, [1]), (1, [4])],
-                          [(1, [2]), (1, [3])],
-                          [(1, [2]), (1, [4])]
-                          ]
-
-
-def test_models4():
-    a = Node()
-    a.add_disjunct(Node(1))
-    a.add_disjunct(Node(2))
-    b = Node()
-    b.add_disjunct(Node(3))
-    b.add_disjunct(Node(4))
-    c = Node(5, (1, a), (1, b))
-    assert c.models() == [[5, (1, [1]), (1, [3])],
-                          [5, (1, [1]), (1, [4])],
-                          [5, (1, [2]), (1, [3])],
-                          [5, (1, [2]), (1, [4])]
-                          ]
-
-
-def test_models5():
-    a = Node()
-    a.add_disjunct(Node(1))
-    a.add_disjunct(Node(2))
-    b = Node(3)
-    c = Node((1, b))
-    c.add_universal(1, a)
-    assert c.models() == [[(1, [3, 1])], [(1, [3, 2])]]
 
 
 def test_leafs():

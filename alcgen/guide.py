@@ -1,13 +1,4 @@
-import copy
-import itertools
-from collections import defaultdict, Counter
 from typing import Collection
-
-import numpy as np
-
-from alcgen.syntax import CE, AND, ANY, OR, TOP, to_pretty, ALL, NOT, to_manchester
-
-
 
 
 class Guide:
