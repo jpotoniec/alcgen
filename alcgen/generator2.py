@@ -5,7 +5,7 @@ from typing import Collection
 
 import numpy as np
 
-from alcgen.syntax import CE, AND, ANY, OR, TOP, to_pretty, ALL, NOT
+from alcgen.syntax import CE, AND, ANY, OR, TOP, to_pretty, ALL, NOT, to_manchester
 
 Model = list[int | tuple[int, "Model"]]
 
@@ -155,25 +155,27 @@ class Node:
                     prod.append([[(r, m)] for m in n.models()])
         return [list(itertools.chain(*p)) for p in itertools.product(*prod)]
 
-    def leafs(self, shared: set | None = None, linked: set | None = None) -> list[tuple[set[int], set[int], set[int]]]:
+    def leafs(self, shared: set | None = None, linked: set | None = None) -> tuple[
+        int, list[tuple[set[int], set[int], set[int]]]]:
+        # TODO what about different depths? Only the deepest should be propagated I think?
         disjuncts = self.all_disjuncts
         if len(disjuncts) > 0:
             assert shared is None
             assert linked is None
             shared = self.conjuncts
             linked = self.linked_conjuncts
-            return list(itertools.chain(*[d.leafs(shared, linked) for d in disjuncts]))
+            return OR, [d.leafs(shared, linked) for d in disjuncts]
         existential = self.all_existential.items()
         if len(existential) > 0:
             result = []
             for r, nodes in existential:
                 for n in nodes:
-                    result += n.leafs()
-            return result
+                    result.append(n.leafs())
+            return AND, result
         ac = self.linked_conjuncts
         if linked is not None:
             ac |= linked
-        return [(self.conjuncts, shared, linked)]
+        return None, (self.conjuncts, shared, linked)
 
     def apply_mapping(self, mapping: dict[int, int]) -> None:
         self.conjuncts = {(-1 if c < 0 else 1) * mapping[abs(c)] if abs(c) in mapping else c for c in self.conjuncts}
@@ -244,6 +246,7 @@ class Generator:
         return self._roles
 
     def generate(self, depth: int, guide: Guide, universal: bool = False, disjunct: bool = False) -> Node:
+        # TODO not every branch must be the same depth
         node = Node()
         for _ in range(guide.n_conjuncts(depth, universal)):
             node.add_conjunct(self._new_class())
@@ -276,22 +279,38 @@ def find_relevant_submodels(classes_: int, model: Model) -> list[Model]:
     return result
 
 
-def closing_mapping(leafs: list[tuple[set[int], set[int], set[int]]]) -> dict[int, CE]:
+def closing_mapping(leafs) -> dict[int, CE]:
     mapping = {}
     used = Counter()
-    for leaf, shared, linked in leafs:
-        if any(atom in mapping for atom in leaf):
-            continue
-        atom = next(iter(leaf))
-        best = None
-        for l in itertools.chain(linked, shared):
-            if best is None or used[best] > used[l]:
-                best = l
-                if used[best] == 0:
-                    break
-        assert best is not None
-        used[best] += 1
-        mapping[atom] = -best
+
+    def helper(leafs):
+        assert isinstance(leafs, tuple)
+        assert len(leafs) == 2
+        if leafs[0] == OR:
+            # Close all - since the leafs are disjunctive, it suffices that any path is satisfiable for the formula to be satisfiable
+            for leaf in leafs[1]:
+                helper(leaf)
+        elif leafs[0] == AND:
+            # Close any - since the leafs are conjunctive, it is sufficient for a single leaf to be unsatisfiable for the whole formula to be unsatisfiable
+            # TODO perhaps some form of optimization?
+            helper(leafs[1][0])
+        else:
+            assert leafs[0] is None
+            leaf, shared, linked = leafs[1]
+            if any(atom in mapping for atom in leaf):
+                return
+            atom = next(iter(leaf))
+            best = None
+            for l in itertools.chain(linked, shared):
+                if best is None or used[best] > used[l]:
+                    best = l
+                    if used[best] == 0:
+                        break
+            assert best is not None
+            used[best] += 1
+            mapping[atom] = -best
+
+    helper(leafs)
     return mapping
 
 
@@ -323,13 +342,17 @@ def minimizing_mapping(symbols: list[set[int]]) -> dict[int, int]:
     return mapping
 
 
-def generate(depth: int, guide: Guide, close: bool, minimize: bool) -> CE:
+def generate(depth: int, guide: Guide, close: bool, minimize: bool, ce: bool = True) -> CE | Node:
     n = Generator().generate(depth, guide)
     if close:
         n.apply_mapping(closing_mapping(n.leafs()))
     if minimize:
         n.apply_mapping(minimizing_mapping(n.symbols()))
-    return n.to_ce()
+    if ce:
+        return n.to_ce()
+    else:
+        return n
+
 
 # TODO verify that it works as intended
 # TODO optimize

@@ -127,7 +127,7 @@ def test_leafs():
     b.add_universal(1, a)
     c = Node((1, Node((1, Node((1, Node(2)))))))
     c.add_universal(1, b)
-    assert c.leafs() == [({2}, {1})]
+    assert c.leafs() == (4, [(4, [(4, [(None, ({2}, None, None))])])])
 
 
 def test_apply_mapping():
