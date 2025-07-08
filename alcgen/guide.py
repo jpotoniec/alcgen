@@ -1,6 +1,3 @@
-from typing import Collection
-
-
 class Guide:
     def n_conjuncts(self, depth: int, universal: bool) -> int:
         ...

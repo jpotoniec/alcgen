@@ -5,7 +5,6 @@ from alcgen.guide import Guide
 from alcgen.node import Node
 from alcgen.syntax import CE, AND, OR
 
-# TODO it seems disjoints are currently required for some reason
 
 class Generator:
     def __init__(self):
@@ -31,8 +30,8 @@ class Generator:
                 child = self.generate(d, guide)
                 node.add_existential(r, child)
             for r, d in guide.universal_roles(depth,
-                                           {r: [n.depth() for n in nodes] for r, nodes in node.existential.items()},
-                                           universal):
+                                              {r: [n.depth() for n in nodes] for r, nodes in node.existential.items()},
+                                              universal):
                 while r > self._roles:
                     self._new_role()
                 child = self.generate(d, guide, universal=True)
