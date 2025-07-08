@@ -1,4 +1,4 @@
-from alcgen.generator2 import Node
+from alcgen.node import Node
 from alcgen.syntax import AND, ANY, OR
 
 
