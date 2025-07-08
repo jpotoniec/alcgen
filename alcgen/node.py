@@ -159,3 +159,11 @@ class Node:
             result[0] |= dsymbols[0]
             result += dsymbols[1:]
         return result
+
+    def depth(self) -> int:
+        d = 0
+        for e in itertools.chain(*self.existential.values()):
+            d = max(d, e.depth() + 1)
+        for e in itertools.chain(*self.universal.values()):
+            d = max(d, e.depth() + 1)
+        return d

@@ -1,10 +1,11 @@
 import itertools
 from collections import defaultdict, Counter
 
-from .guide import Guide
-from .node import Node
-from .syntax import CE, AND, OR
+from alcgen.guide import Guide
+from alcgen.node import Node
+from alcgen.syntax import CE, AND, OR
 
+# TODO it seems disjoints are currently required for some reason
 
 class Generator:
     def __init__(self):
@@ -20,20 +21,21 @@ class Generator:
         return self._roles
 
     def generate(self, depth: int, guide: Guide, universal: bool = False, disjunct: bool = False) -> Node:
-        # TODO not every branch must be the same depth
         node = Node()
         for _ in range(guide.n_conjuncts(depth, universal)):
             node.add_conjunct(self._new_class())
         if depth > 0:
-            for r in guide.existential_roles(depth, self._roles, universal):
+            for r, d in guide.existential_roles(depth, self._roles, universal):
                 while r > self._roles:
                     self._new_role()
-                child = self.generate(depth - 1, guide)
+                child = self.generate(d, guide)
                 node.add_existential(r, child)
-            for r in guide.universal_roles(depth, {r: len(n) for r, n in node.existential.items()}, universal):
+            for r, d in guide.universal_roles(depth,
+                                           {r: [n.depth() for n in nodes] for r, nodes in node.existential.items()},
+                                           universal):
                 while r > self._roles:
                     self._new_role()
-                child = self.generate(depth - 1, guide, universal=True)
+                child = self.generate(d, guide, universal=True)
                 node.add_universal(r, child)
         if not disjunct:
             for _ in range(guide.n_disjuncts(depth, universal)):
