@@ -507,6 +507,26 @@ def test_bruteforce():
         all_ops |= ops(result)
     assert all_ops == {AND, OR, ANY, ALL, NOT}
 
+
+def test_90_697():
+    seed1: int = 0xbeef
+    seed2: int = 0xfeed
+    seed3: int = 0xc0ffee
+    steps = 90
+    i = 697
+    guide = RandomGuide(np.random.default_rng(seed1 * steps + seed2 * i + seed3), steps, steps)
+    Generator(guide).run(steps)
+
+
+def test_110_53():
+    seed1: int = 0xbeef
+    seed2: int = 0xfeed
+    seed3: int = 0xc0ffee
+    steps = 110
+    i = 2
+    guide = RandomGuide(np.random.default_rng(seed1 * steps + seed2 * i + seed3), steps, steps)
+    Generator(guide).run(steps)
+
 # def test_nothing():
 #     ce = Generator(MockGuide([], 3)).run(True)
 #     assert ce == (AND, (AND, 1, 2), (AND, (NOT, 2), 3))

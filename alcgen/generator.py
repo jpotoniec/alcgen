@@ -9,7 +9,7 @@ from alcgen.abox import CAssertion, RAssertion, ABox, PartialRAssertion
 from alcgen.aux import insert_maximal, intersection, has_non_empty_intersection
 from alcgen.guide import Guide
 from alcgen.random_guide import RandomGuide
-from alcgen.syntax import CE, AND, OR, NOT, ALL, ANY, BOT, TOP, eq, rename, nnf
+from alcgen.syntax import CE, AND, OR, NOT, ALL, ANY, BOT, TOP, eq, rename, nnf, to_pretty
 
 
 def _find_subproblems(all_pairs: list[Collection[tuple[int, int]]], different: Collection[tuple[int, int]]) -> \
@@ -103,6 +103,7 @@ class Generator:
 
     def _define(self, a: int, def_: CE):
         assert self._definitions[a] is None
+        print(a, ":=", to_pretty(def_))
         self._definitions[a] = def_
 
     def _undefine(self, a: int):
@@ -426,6 +427,7 @@ class Generator:
             b = expand(b)
             # eq transforms to nnf internally so its fine to expand once
             if eq(a, b) or eq(a, (NOT, b)):
+                print("Clash", a, b)
                 return False
         return True
 
@@ -473,6 +475,14 @@ class Generator:
         all_pairs = self._pairs(aboxes)
         for subproblem in self._find_subproblems(all_pairs):
             order = sorted(subproblem, key=lambda p: len(all_pairs[p]))
+            print(order)
+            cls = set(itertools.chain(*itertools.chain(*[all_pairs[i] for i in order])))
+            print()
+            print(self._different)
+            print(cls)
+            print([self._blocked[c] for c in cls])
+            print(*[all_pairs[p] for p in order])
+            print(*[abox for abox in aboxes if any(ca.c in cls for ca in abox.fresh)], sep='\n')
             if not helper(0, order):
                 cls = set(itertools.chain(*itertools.chain(*[all_pairs[i] for i in order])))
                 print()
@@ -555,6 +565,7 @@ class Generator:
             if n is None:
                 break
             current = n
+        print(to_pretty(self._expand(0)))
         closed = self._close(current)
         assert closed
         assert self._check_different()
@@ -562,3 +573,20 @@ class Generator:
             return self.minimized(current)
         else:
             return self._expand(0)
+
+
+if __name__ == '__main__':
+    seed1: int = 0xbeef
+    seed2: int = 0xfeed
+    seed3: int = 0xc0ffee
+    steps = 110
+    i = 2
+    guide = RandomGuide(np.random.default_rng(seed1 * steps + seed2 * i + seed3), steps, steps)
+    # 63 doesn't fail, 64 fails
+    # It seems AND clashes, because it expands one of the non-fresh symbols replacing the current fresh with something new that cannot be closed
+    Generator(guide).run(63)
+
+    """
+    114 := ¬C92
+    115 := ¬C93
+    """
