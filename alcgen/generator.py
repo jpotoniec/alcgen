@@ -1,4 +1,5 @@
 import itertools
+import typing
 from collections import defaultdict, Counter
 
 from alcgen.guide import Guide
@@ -85,31 +86,123 @@ def closing_mapping(leafs) -> dict[int, CE]:
 
 
 def minimizing_mapping(symbols: list[set[int]]) -> dict[int, int]:
-    ctr = Counter()
-    for symbol in itertools.chain(*symbols):
-        ctr[symbol] += 1
-    non_unique = {s for s, v in ctr.items() if v > 1}
-    unique = set()
-    for batch in symbols:
-        candidates = {s for s in batch if s not in non_unique}
-        assert len(candidates) >= 1, batch
-        c = next(iter(candidates))
-        assert c not in unique
-        unique.add(c)
     cooccurrences = defaultdict(set)
     for batch in symbols:
         for s in batch:
             cooccurrences[s] |= batch
-    mapping = {}
+    max_symbol = max(cooccurrences.keys())
+    mapping = [None] * (max_symbol + 1)
     for s, other in cooccurrences.items():
-        if s in unique:
-            continue
-        mapped = {mapping[r] for r in other if r in mapping}
+        mapped = {mapping[r] for r in other if mapping[r] is not None}
         n = 1
-        while n in mapped or n in unique:
+        while n in mapped:
             n += 1
         mapping[s] = n
-    return mapping
+    return {i: v for i, v in enumerate(mapping) if v is not None}
+
+
+def nonequivalence_constraints(a: Node, b: Node) -> list[tuple[set[int], set[int]]]:
+    def count_signs(items: set[int]) -> tuple[int, int]:
+        p, n = 0, 0
+        for i in items:
+            if i > 0:
+                p += 1
+            else:
+                assert i < 0
+                n += 1
+        return p, n
+
+    if len(a.conjuncts) != len(b.conjuncts):
+        return []
+    if count_signs(a.conjuncts) != count_signs(b.conjuncts):
+        return []
+    if a.descriptor != b.descriptor:
+        return []
+    # We produce a constraint as soon as possible, without going down - it is perhaps less interesting, but more efficient
+    return [(a.conjuncts, b.conjuncts)]
+    """
+    We return the first, non-empty set of constraints:
+    1. to ensure universal restrictions are different
+    2. to ensure existential restrictions are different
+    3. to ensure conjuncts at the current level are different
+    We prefer to differentiate in constraints rather than top-level and in universal rather than in existential restrictions.
+    This is a heuristic to limit the number of constraints.
+    """
+    for acoll, bcoll in [(a.universal, b.universal), (a.existential, b.existential)]:
+        result = []
+        for r, anodes in acoll.items():
+            bnodes = bcoll[r]
+            if len(anodes) != len(bnodes):
+                return []
+            hits = [False] * len(bnodes)
+            hit = True
+            for i, x in enumerate(anodes):
+                for j, y in enumerate(bnodes):
+                    if y is None:
+                        continue
+                    req = nonequivalence_constraints(x, y)
+                    if len(req) > 0:
+                        result.extend(req)
+                        hits[j] = True
+                        hit = True
+                if not hit:
+                    return []
+            if not all(hits):
+                return []
+        if len(result) > 0:
+            return result
+    return [(a.conjuncts, b.conjuncts)]
+
+
+def compute_constraints(n: Node) -> typing.Generator[tuple[set[int], set[int]], None, None]:
+    for nodes in itertools.chain(n.existential.values(), n.universal.values()):
+        for i, x in enumerate(nodes):
+            for y in nodes[i + 1:]:
+                yield from nonequivalence_constraints(x, y)
+            yield from compute_constraints(x)
+
+
+def union(*sets: set[int]) -> set[int]:
+    result = set()
+    result.update(*sets)
+    return result
+
+
+def merge_constraint_into_symbols(symbols: list[set[int]], index: defaultdict[int, set[int]],
+                                  constraint: tuple[set[int], set[int]]) -> None:
+    """
+    For the constraint to be satisfied the left set must differ from the right set, i.e., they must differ by at least one element.
+    """
+    left, right = constraint
+    left = {abs(x) for x in left}
+    right = {abs(y) for y in right}
+    lidx = union(*[index[s] for s in left])
+    ridx = union(*[index[s] for s in right])
+
+    if len(lidx & ridx) > 0:
+        # Already satisfied
+        return
+    lidx |= ridx
+    if len(lidx) > 0:
+        i = next(iter(lidx))
+    else:
+        i = 0
+    if len(left & symbols[i]) == 0:
+        s = next(iter(left))
+        symbols[i].add(s)
+        index[s].add(i)
+    if len(right & symbols[i]) == 0:
+        s = next(iter(right))
+        symbols[i].add(s)
+        index[s].add(i)
+
+
+def build_index(symbols: list[set[int]]) -> defaultdict[int, set[int]]:
+    result = defaultdict(set[int])
+    for i, part in enumerate(symbols):
+        for s in part:
+            result[s].add(i)
+    return result
 
 
 def generate(depth: int, guide: Guide, close: bool, minimize: bool, ce: bool = True) -> CE | Node:
@@ -117,11 +210,12 @@ def generate(depth: int, guide: Guide, close: bool, minimize: bool, ce: bool = T
     if close:
         n.apply_mapping(closing_mapping(n.leafs()))
     if minimize:
-        n.apply_mapping(minimizing_mapping(n.symbols()))
+        symbols = n.symbols()
+        index = build_index(symbols)
+        for constraint in compute_constraints(n):
+            merge_constraint_into_symbols(symbols, index, constraint)
+        n.apply_mapping(minimizing_mapping(symbols))
     if ce:
         return n.to_ce()
     else:
         return n
-
-# TODO verify that it works as intended
-# TODO optimize

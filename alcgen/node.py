@@ -17,6 +17,8 @@ class Node:
         self.existential = defaultdict(list)
         self.universal = defaultdict(list)
         self.linked = []
+        # TODO Invalidate the descriptor if a new operand is added
+        self._descriptor = None
         for arg in args:
             if isinstance(arg, Node):
                 self.disjuncts.append(arg)
@@ -167,3 +169,13 @@ class Node:
         for e in itertools.chain(*self.universal.values()):
             d = max(d, e.depth() + 1)
         return d
+
+    @property
+    def descriptor(self):
+        if self._descriptor is None:
+            c = len(self.conjuncts)
+            d = sorted([n.descriptor for n in self.disjuncts])
+            e = sorted([(r, n.descriptor) for r, nodes in self.existential.items() for n in nodes])
+            u = sorted([(r, n.descriptor) for r, nodes in self.universal.items() for n in nodes])
+            self._descriptor = (c, d, e, u)
+        return self._descriptor
