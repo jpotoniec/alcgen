@@ -3,6 +3,7 @@ import typing
 from collections import defaultdict, Counter
 
 from alcgen.guide import Guide
+from alcgen.leaf import Leafs, Leaf
 from alcgen.node import Node
 from alcgen.syntax import CE, AND, OR
 
@@ -48,23 +49,24 @@ def closing_mapping(leafs) -> dict[int, CE]:
     mapping = {}
     used = Counter()
 
-    def helper(leafs):
-        assert isinstance(leafs, tuple)
-        assert len(leafs) == 2
-        if leafs[0] == OR:
+    def helper(leafs: Leafs):
+        if leafs.op == OR:
             # Close all - since the leafs are disjunctive, it suffices that any path is satisfiable for the formula to be satisfiable
-            for leaf in leafs[1]:
+            for leaf in leafs.leafs:
                 helper(leaf)
-        elif leafs[0] == AND:
+        elif leafs.op == AND:
             # Close any - since the leafs are conjunctive, it is sufficient for a single leaf to be unsatisfiable for the whole formula to be unsatisfiable
-            # TODO perhaps some form of optimization?
-            helper(leafs[1][0])
+            # We prefer the deepest, but that is a heuristic with no guarantees
+            helper(max(leafs.leafs, key=lambda leaf: leaf.depth))
         else:
-            assert leafs[0] is None
-            leaf, shared, linked = leafs[1]
-            if any(atom in mapping for atom in leaf):
+            assert leafs.op is None
+            assert isinstance(leafs.leafs, Leaf)
+            atoms = leafs.leafs.atoms
+            shared = leafs.leafs.shared
+            linked = leafs.leafs.linked
+            if any(atom in mapping for atom in atoms):
                 return
-            atom = next(iter(leaf))
+            atom = next(iter(atoms))
             best = None
             for l in itertools.chain(linked, shared):
                 if best is None or used[best] > used[l]:
@@ -72,7 +74,7 @@ def closing_mapping(leafs) -> dict[int, CE]:
                     if used[best] == 0:
                         break
             if best is None:
-                for l in leaf - {atom}:
+                for l in atoms - {atom}:
                     if best is None or used[best] > used[l]:
                         best = l
                         if used[best] == 0:
@@ -101,7 +103,7 @@ def minimizing_mapping(symbols: list[set[int]]) -> dict[int, int]:
     return {i: v for i, v in enumerate(mapping) if v is not None}
 
 
-def nonequivalence_constraints(a: Node, b: Node) -> list[tuple[set[int], set[int]]]:
+def nonequivalence_constraints(a: Node, b: Node, lazy: bool) -> list[tuple[set[int], set[int]]]:
     def count_signs(items: set[int]) -> tuple[int, int]:
         p, n = 0, 0
         for i in items:
@@ -118,48 +120,48 @@ def nonequivalence_constraints(a: Node, b: Node) -> list[tuple[set[int], set[int
         return []
     if a.descriptor != b.descriptor:
         return []
-    # We produce a constraint as soon as possible, without going down - it is perhaps less interesting, but more efficient
-    return [(a.conjuncts, b.conjuncts)]
-    """
-    We return the first, non-empty set of constraints:
-    1. to ensure universal restrictions are different
-    2. to ensure existential restrictions are different
-    3. to ensure conjuncts at the current level are different
-    We prefer to differentiate in constraints rather than top-level and in universal rather than in existential restrictions.
-    This is a heuristic to limit the number of constraints.
-    """
-    for acoll, bcoll in [(a.universal, b.universal), (a.existential, b.existential)]:
-        result = []
-        for r, anodes in acoll.items():
-            bnodes = bcoll[r]
-            if len(anodes) != len(bnodes):
-                return []
-            hits = [False] * len(bnodes)
-            hit = True
-            for i, x in enumerate(anodes):
-                for j, y in enumerate(bnodes):
-                    if y is None:
-                        continue
-                    req = nonequivalence_constraints(x, y)
-                    if len(req) > 0:
-                        result.extend(req)
-                        hits[j] = True
-                        hit = True
-                if not hit:
+    if not lazy:
+        """
+        We return the first, non-empty set of constraints:
+        1. to ensure universal restrictions are different
+        2. to ensure existential restrictions are different
+        3. to ensure conjuncts at the current level are different
+        We prefer to differentiate in constraints rather than top-level and in universal rather than in existential restrictions.
+        This is a heuristic to limit the number of constraints.
+        """
+        for acoll, bcoll in [(a.universal, b.universal), (a.existential, b.existential)]:
+            result = []
+            for r, anodes in acoll.items():
+                bnodes = bcoll[r]
+                if len(anodes) != len(bnodes):
                     return []
-            if not all(hits):
-                return []
-        if len(result) > 0:
-            return result
+                hits = [False] * len(bnodes)
+                hit = True
+                for i, x in enumerate(anodes):
+                    for j, y in enumerate(bnodes):
+                        if y is None:
+                            continue
+                        req = nonequivalence_constraints(x, y, lazy)
+                        if len(req) > 0:
+                            result.extend(req)
+                            hits[j] = True
+                            hit = True
+                    if not hit:
+                        return []
+                if not all(hits):
+                    return []
+            if len(result) > 0:
+                return result
+    # If lazy - we produce a constraint as soon as possible, without going down - it is perhaps less interesting, but more efficient
     return [(a.conjuncts, b.conjuncts)]
 
 
-def compute_constraints(n: Node) -> typing.Generator[tuple[set[int], set[int]], None, None]:
+def compute_constraints(n: Node, lazy: bool = True) -> typing.Generator[tuple[set[int], set[int]], None, None]:
     for nodes in itertools.chain(n.existential.values(), n.universal.values()):
         for i, x in enumerate(nodes):
             for y in nodes[i + 1:]:
-                yield from nonequivalence_constraints(x, y)
-            yield from compute_constraints(x)
+                yield from nonequivalence_constraints(x, y, lazy)
+            yield from compute_constraints(x, lazy)
 
 
 def union(*sets: set[int]) -> set[int]:

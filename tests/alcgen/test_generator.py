@@ -2,7 +2,7 @@ import copy
 
 import pytest
 
-from alcgen.generator import generate, compute_constraints, merge_constraint_into_symbols, build_index
+from alcgen.generator import generate, compute_constraints, merge_constraint_into_symbols, build_index, closing_mapping
 from alcgen.guide import Guide
 
 
@@ -99,8 +99,10 @@ def test_constraints():
             return 0
 
     node = generate(2, MyGuide(), False, False, ce=False)
-    c = list(compute_constraints(node))
-    assert c == [({9, 10}, {17, 18}), ({5, 6}, {8, 7}), ({13, 14}, {16, 15}), ({21, 22}, {23, 24})]
+    eager = list(compute_constraints(node, lazy=False))
+    assert eager == [({9, 10}, {17, 18}), ({5, 6}, {8, 7}), ({13, 14}, {16, 15}), ({21, 22}, {23, 24})]
+    lazy = list(compute_constraints(node, lazy=True))
+    assert lazy == [({3, 4}, {11, 12}), ({5, 6}, {8, 7}), ({13, 14}, {16, 15}), ({21, 22}, {23, 24})]
 
 
 def test_merge_constraint_into_symbols_partial():
@@ -136,3 +138,31 @@ def test_merge_constraint_into_symbols_missing():
     assert len(d) == 2
     assert len(d & {30, 31}) == 1
     assert len(d & {32, 33}) == 1
+
+
+def test_closing_mapping_prefers_deeper():
+    class MyGuide(BaselineGuide):
+        def __init__(self):
+            self.ctr = 0
+
+        def n_disjuncts(self, depth: int, universal: bool) -> int:
+            return 0
+
+        def existential_roles(self, depth: int, n_roles: int, universal: bool) -> list[tuple[int, int]]:
+            if depth == 2:
+                return [(1, depth - 1)] * 2
+            elif depth == 1:
+                self.ctr += 1
+                if self.ctr == 2:
+                    return [(1, depth - 1)]
+                else:
+                    return []
+
+        def universal_roles(self, depth: int, roles: dict[int, list[int]], universal: bool) -> list[tuple[int, int]]:
+            return []
+
+    n = generate(2, MyGuide(), False, False, ce=False)
+    print(n.debug())
+    mapping = closing_mapping(n.leafs())
+    print(mapping)
+    assert mapping == {7: -8} or mapping == {8: -7}

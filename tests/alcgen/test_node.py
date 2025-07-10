@@ -1,3 +1,4 @@
+from alcgen.leaf import Leafs, Leaf
 from alcgen.node import Node
 from alcgen.syntax import AND, ANY, OR
 
@@ -62,7 +63,7 @@ def test_leafs():
     b.add_universal(1, a)
     c = Node((1, Node((1, Node((1, Node(2)))))))
     c.add_universal(1, b)
-    assert c.leafs() == (4, [(4, [(4, [(None, ({2}, None, None))])])])
+    assert c.leafs() == Leafs(4, [Leafs(4, [Leafs(4, [Leafs(None, Leaf({2}, set(), set()), 3)], 3)], 3)], 3)
 
 
 def test_apply_mapping():

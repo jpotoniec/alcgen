@@ -1,6 +1,7 @@
 import itertools
 from collections import defaultdict
 
+from alcgen.leaf import Leafs, Leaf
 from alcgen.syntax import CE, AND, ANY, OR, TOP, to_pretty, ALL, NOT
 
 
@@ -121,27 +122,27 @@ class Node:
                 result[r].extend(nodes)
         return result
 
-    def leafs(self, shared: set | None = None, linked: set | None = None) -> tuple[
-        int, list[tuple[set[int], set[int], set[int]]]]:
-        # TODO what about different depths? Only the deepest should be propagated I think?
+    def leafs(self, shared: set | None = None, linked: set | None = None, depth: int = 0) -> Leafs:
         disjuncts = self.all_disjuncts
         if len(disjuncts) > 0:
             assert shared is None
             assert linked is None
             shared = self.conjuncts
             linked = self.linked_conjuncts
-            return OR, [d.leafs(shared, linked) for d in disjuncts]
+            # Don't increase depth in disjunction, because that is not another level of the model
+            leafs = [d.leafs(shared, linked, depth) for d in disjuncts]
+            return Leafs(OR, leafs, max(leaf.depth for leaf in leafs))
         existential = self.all_existential.items()
         if len(existential) > 0:
-            result = []
+            leafs = []
             for r, nodes in existential:
                 for n in nodes:
-                    result.append(n.leafs())
-            return AND, result
+                    leafs.append(n.leafs(depth=depth + 1))
+            return Leafs(AND, leafs, max(leaf.depth for leaf in leafs))
         ac = self.linked_conjuncts
         if linked is not None:
             ac |= linked
-        return None, (self.conjuncts, shared or set(), linked or set())
+        return Leafs(None, Leaf(self.conjuncts, shared or set(), linked or set()), depth)
 
     def apply_mapping(self, mapping: dict[int, int]) -> None:
         self.conjuncts = {(-1 if c < 0 else 1) * mapping[abs(c)] if abs(c) in mapping else c for c in self.conjuncts}
