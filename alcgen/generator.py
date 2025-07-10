@@ -1,7 +1,8 @@
 import itertools
 import typing
-from collections import defaultdict, Counter
+from collections import Counter
 
+from alcgen.aux import minimizing_mapping
 from alcgen.guide import Guide
 from alcgen.leaf import Leafs, Leaf
 from alcgen.node import Node
@@ -87,22 +88,6 @@ def closing_mapping(leafs) -> dict[int, CE]:
     return mapping
 
 
-def minimizing_mapping(symbols: list[set[int]]) -> dict[int, int]:
-    cooccurrences = defaultdict(set)
-    for batch in symbols:
-        for s in batch:
-            cooccurrences[s] |= batch
-    max_symbol = max(cooccurrences.keys())
-    mapping = [None] * (max_symbol + 1)
-    for s, other in cooccurrences.items():
-        mapped = {mapping[r] for r in other if mapping[r] is not None}
-        n = 1
-        while n in mapped:
-            n += 1
-        mapping[s] = n
-    return {i: v for i, v in enumerate(mapping) if v is not None}
-
-
 def nonequivalence_constraints(a: Node, b: Node, lazy: bool) -> list[tuple[set[int], set[int]]]:
     def count_signs(items: set[int]) -> tuple[int, int]:
         p, n = 0, 0
@@ -164,47 +149,46 @@ def compute_constraints(n: Node, lazy: bool = True) -> typing.Generator[tuple[se
             yield from compute_constraints(x, lazy)
 
 
-def union(*sets: set[int]) -> set[int]:
-    result = set()
-    result.update(*sets)
-    return result
-
-
-def merge_constraint_into_symbols(symbols: list[set[int]], index: defaultdict[int, set[int]],
-                                  constraint: tuple[set[int], set[int]]) -> None:
-    """
-    For the constraint to be satisfied the left set must differ from the right set, i.e., they must differ by at least one element.
-    """
-    left, right = constraint
-    left = {abs(x) for x in left}
-    right = {abs(y) for y in right}
-    lidx = union(*[index[s] for s in left])
-    ridx = union(*[index[s] for s in right])
-
-    if len(lidx & ridx) > 0:
-        # Already satisfied
-        return
-    lidx |= ridx
-    if len(lidx) > 0:
-        i = next(iter(lidx))
-    else:
-        i = 0
-    if len(left & symbols[i]) == 0:
-        s = next(iter(left))
-        symbols[i].add(s)
-        index[s].add(i)
-    if len(right & symbols[i]) == 0:
-        s = next(iter(right))
-        symbols[i].add(s)
-        index[s].add(i)
-
-
-def build_index(symbols: list[set[int]]) -> defaultdict[int, set[int]]:
-    result = defaultdict(set[int])
-    for i, part in enumerate(symbols):
-        for s in part:
-            result[s].add(i)
-    return result
+# def union(*sets: set[int]) -> set[int]:
+#     result = set()
+#     result.update(*sets)
+#     return result
+#
+#
+# def merge_constraint_into_symbols(symbols: list[set[int]], index: dict[int, set[int]],
+#                                   constraint: tuple[set[int], set[int]]) -> None:
+#     """
+#     For the constraint to be satisfied the left set must differ from the right set, i.e., they must differ by at least one element.
+#     """
+#     left, right = constraint
+#     left = {abs(x) for x in left}
+#     right = {abs(y) for y in right}
+#     lidx = union(*[index.get(s, set()) for s in left])
+#     ridx = union(*[index.get(s, set()) for s in right])
+#
+#     if len(lidx & ridx) > 0:
+#         # Already satisfied
+#         return
+#     lidx |= ridx
+#     if len(lidx) > 0:
+#         i = next(iter(lidx))
+#     else:
+#         i = 0
+#     if len(left & symbols[i]) == 0:
+#         s = next(iter(left))
+#         symbols[i].add(s)
+#         index.setdefault(s, set()).add(i)
+#     if len(right & symbols[i]) == 0:
+#         s = next(iter(right))
+#         symbols[i].add(s)
+#         index.setdefault(s, set()).add(i)
+#
+#
+# def merge_constraints_into_symbols(symbols: list[set[int]],
+#                                    constraints: typing.Iterable[tuple[set[int], set[int]]]) -> None:
+#     index = build_index(symbols)
+#     for constraint in constraints:
+#         merge_constraint_into_symbols(symbols, index, constraint)
 
 
 def generate(depth: int, guide: Guide, close: bool, minimize: bool, ce: bool = True) -> CE | Node:
@@ -213,10 +197,8 @@ def generate(depth: int, guide: Guide, close: bool, minimize: bool, ce: bool = T
         n.apply_mapping(closing_mapping(n.leafs()))
     if minimize:
         symbols = n.symbols()
-        index = build_index(symbols)
-        for constraint in compute_constraints(n):
-            merge_constraint_into_symbols(symbols, index, constraint)
-        n.apply_mapping(minimizing_mapping(symbols))
+        # symbols = merge_constraints_into_symbols(symbols, list(compute_constraints(n)))
+        n.apply_mapping(minimizing_mapping(symbols, list(compute_constraints(n))))
     if ce:
         return n.to_ce()
     else:

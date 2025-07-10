@@ -1,8 +1,6 @@
-import copy
-
 import pytest
 
-from alcgen.generator import generate, compute_constraints, merge_constraint_into_symbols, build_index, closing_mapping
+from alcgen.generator import generate, compute_constraints, closing_mapping
 from alcgen.guide import Guide
 
 
@@ -103,41 +101,6 @@ def test_constraints():
     assert eager == [({9, 10}, {17, 18}), ({5, 6}, {8, 7}), ({13, 14}, {16, 15}), ({21, 22}, {23, 24})]
     lazy = list(compute_constraints(node, lazy=True))
     assert lazy == [({3, 4}, {11, 12}), ({5, 6}, {8, 7}), ({13, 14}, {16, 15}), ({21, 22}, {23, 24})]
-
-
-def test_merge_constraint_into_symbols_partial():
-    original = [{1, 2}, {3, 19, 4, 20}, {5, 6, 9, 10, 25, 26}, {7, 8, 9, 10, 25, 26}, {11, 19, 12, 20},
-                {13, 14, 17, 18, 25, 26}, {15, 16, 17, 18, 25, 26}, {25, 26, 21, 22}, {24, 25, 26, 23}]
-    symbols = copy.deepcopy(original)
-    merge_constraint_into_symbols(symbols, build_index(symbols), ({9, 10}, {17, 18}))
-    assert len(original) == len(symbols)
-    modified = [i for i in range(len(original)) if original[i] != symbols[i]]
-    assert len(modified) == 1
-    m = modified[0]
-    d = symbols[m] - original[m]
-    assert len(d) == 1
-    assert d <= {9, 10, 17, 18}
-
-
-def test_merge_constraint_into_symbols_full():
-    original = [{1, 2}, {3, 19, 4, 20}, {5, 6, 9, 10, 25, 26}, {7, 8, 9, 10, 25, 26}, {11, 19, 12, 20},
-                {13, 14, 17, 18, 25, 26}, {15, 16, 17, 18, 25, 26}, {25, 26, 21, 22}, {24, 25, 26, 23}]
-    symbols = copy.deepcopy(original)
-    merge_constraint_into_symbols(symbols, build_index(symbols), ({5, 6}, {25, 26}))
-    assert original == symbols
-
-
-def test_merge_constraint_into_symbols_missing():
-    original = [{1, 2}, {3, 19, 4, 20}, {5, 6, 9, 10, 25, 26}, {7, 8, 9, 10, 25, 26}, {11, 19, 12, 20},
-                {13, 14, 17, 18, 25, 26}, {15, 16, 17, 18, 25, 26}, {25, 26, 21, 22}, {24, 25, 26, 23}]
-    symbols = copy.deepcopy(original)
-    merge_constraint_into_symbols(symbols, build_index(symbols), ({30, 31}, {32, 33}))
-    assert len(original) == len(symbols)
-    assert original[1:] == symbols[1:]
-    d = symbols[0] - original[0]
-    assert len(d) == 2
-    assert len(d & {30, 31}) == 1
-    assert len(d & {32, 33}) == 1
 
 
 def test_closing_mapping_prefers_deeper():
