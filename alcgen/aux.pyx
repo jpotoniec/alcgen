@@ -1,5 +1,7 @@
 # distutils: language=c++
 # distutils: extra_compile_args=["-std=c++20"]
+
+
 from cython import uint
 from cython.cimports.libcpp import bool as cppbool
 from cython.cimports.libcpp.pair import pair

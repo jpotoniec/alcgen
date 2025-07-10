@@ -30,30 +30,29 @@ class Node:
                 self.add_conjunct(arg)
 
     def to_ce(self) -> CE:
-        def _join(op, items):
-            result = None
-            for item in items:
-                if not isinstance(item, tuple) and item < 0:
-                    item = (NOT, -item)
-                if result is None:
-                    result = item
-                else:
-                    result = (op, result, item)
-            return result
+        def _add(left, op, right):
+            if left is None:
+                return right
+            else:
+                return op, left, right
 
-        conjuncts = itertools.chain(self.conjuncts,
-                                    [(ANY, r, n.to_ce()) for r, nodes in self.existential.items() for n in
-                                     nodes],
-                                    [(ALL, r, n.to_ce()) for r, nodes in self.universal.items() for n in nodes]
-                                    )
-        result = _join(AND, conjuncts)
+        result = None
+        for i in self.conjuncts:
+            result = _add(result, AND, (NOT, -i) if i < 0 else i)
+        for r, nodes in self.existential.items():
+            for n in nodes:
+                result = _add(result, AND, (ANY, r, n.to_ce()))
+        for r, nodes in self.universal.items():
+            for n in nodes:
+                result = _add(result, AND, (ALL, r, n.to_ce()))
+
         if len(self.disjuncts) > 0:
             assert len(self.disjuncts) >= 2
-            or_ = _join(OR, [n.to_ce() for n in self.disjuncts])
-            if result is None:
-                result = or_
-            else:
-                result = (AND, result, or_)
+            or_ = None
+            for n in self.disjuncts:
+                or_ = _add(or_, OR, n.to_ce())
+            if or_ is not None:
+                result = _add(result, AND, or_)
         if result is not None:
             return result
         else:
