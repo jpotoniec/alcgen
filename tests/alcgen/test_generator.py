@@ -2,7 +2,8 @@ import copy
 
 import pytest
 
-from alcgen.generator import generate, compute_constraints, merge_constraint_into_symbols, build_index, closing_mapping
+from alcgen.generator import generate, compute_constraints, merge_constraint_into_symbols, build_index, closing_mapping, \
+    Generator, minimizing_mapping
 from alcgen.guide import Guide
 
 
@@ -166,3 +167,17 @@ def test_closing_mapping_prefers_deeper():
     mapping = closing_mapping(n.leafs())
     print(mapping)
     assert mapping == {7: -8} or mapping == {8: -7}
+
+
+def test_minimize_not_closed():
+    n = Generator().generate(0, BaselineGuide())
+    symbols = n.symbols()
+    assert len(symbols) == 1
+    assert len(symbols[0]) == 6
+    symbols = n.symbols()
+    index = build_index(symbols)
+    for constraint in compute_constraints(n):
+        merge_constraint_into_symbols(symbols, index, constraint)
+    mapping = minimizing_mapping(symbols)
+    assert len(mapping.keys()) == 6
+    assert len(set(mapping.values())) == 6
