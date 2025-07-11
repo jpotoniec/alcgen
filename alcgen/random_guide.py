@@ -84,6 +84,8 @@ class RandomGuide(Guide):
             return self.rng.choice(v)
 
         cfg = self._cfg(universal)
+        if cfg.universal_threshold_low is None or cfg.universal_threshold_high is None:
+            return []
         th = int(self.rng.integers(cfg.universal_threshold_low, cfg.universal_threshold_high + 1))
         if cfg.universal_depth == 'max':
             sample = sample_max

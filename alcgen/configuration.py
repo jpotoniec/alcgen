@@ -17,8 +17,8 @@ class RandomGuideConfiguration(pydantic.BaseModel):
     existential_depth: Literal['max', 'uniform', 'ascending', 'descending'] = 'max'
     existential_force_depth: None | Literal['uniform', 'first', 'last'] = 'uniform'
 
-    universal_threshold_low: int = 2
-    universal_threshold_high: int = 2
+    universal_threshold_low: int | None = 2
+    universal_threshold_high: int | None = 2
     universal_depth: Literal['max', 'uniform'] = 'max'
 
 
