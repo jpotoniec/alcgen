@@ -207,16 +207,24 @@ def build_index(symbols: list[set[int]]) -> defaultdict[int, set[int]]:
     return result
 
 
+def do_close(n: Node):
+    n.apply_mapping(closing_mapping(n.leafs()))
+
+
+def do_minimize(n: Node):
+    symbols = n.symbols()
+    index = build_index(symbols)
+    for constraint in compute_constraints(n):
+        merge_constraint_into_symbols(symbols, index, constraint)
+    n.apply_mapping(minimizing_mapping(symbols))
+
+
 def generate(depth: int, guide: Guide, close: bool, minimize: bool, ce: bool = True) -> CE | Node:
     n = Generator().generate(depth, guide)
     if close:
-        n.apply_mapping(closing_mapping(n.leafs()))
+        do_close(n)
     if minimize:
-        symbols = n.symbols()
-        index = build_index(symbols)
-        for constraint in compute_constraints(n):
-            merge_constraint_into_symbols(symbols, index, constraint)
-        n.apply_mapping(minimizing_mapping(symbols))
+        do_minimize(n)
     if ce:
         return n.to_ce()
     else:

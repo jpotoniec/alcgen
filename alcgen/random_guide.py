@@ -1,28 +1,7 @@
-from typing import Literal
-
 import numpy as np
-import pydantic
 
+from alcgen.configuration import RandomGuideConfiguration
 from alcgen.guide import Guide
-
-
-class RandomGuideConfiguration(pydantic.BaseModel):
-    conjuncts_low: int = 1
-    conjuncts_high: int = 3
-
-    disjuncts_p: float = 1.0
-    disjuncts_low: int = 2
-    disjuncts_high: int = 2
-
-    n_roles: int = 1
-    existential_low: int = 0
-    existential_high: int = 3
-    existential_depth: Literal['max', 'uniform'] = 'max'
-    existential_force_depth: bool = True
-
-    universal_threshold_low: int = 2
-    universal_threshold_high: int = 2
-    universal_depth: Literal['max', 'uniform'] = 'max'
 
 
 class RandomGuide(Guide):
