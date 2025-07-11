@@ -4,6 +4,33 @@ from alcgen.configuration import RandomGuideConfiguration
 from alcgen.guide import Guide
 
 
+def policy_max(rng: np.random.Generator, n: int, depth: int) -> list[int]:
+    return [depth - 1] * n
+
+
+def policy_uniform(rng: np.random.Generator, n: int, depth: int) -> list[int]:
+    return rng.integers(0, depth, n)
+
+
+def policy_ascending(rng: np.random.Generator, n: int, depth: int) -> list[int]:
+    if n >= depth:
+        return list(range(depth)) + [depth - 1] * (n - depth)
+    else:
+        return list(range(depth - n, depth))
+
+
+def policy_descending(rng: np.random.Generator, n: int, depth: int) -> list[int]:
+    return list(reversed(policy_ascending(rng, n, depth)))
+
+
+existential_policies = {
+    'max': policy_max,
+    'uniform': policy_uniform,
+    'ascending': policy_ascending,
+    'descending': policy_descending,
+}
+
+
 class RandomGuide(Guide):
     def __init__(self, rng: np.random.Generator, cfg: RandomGuideConfiguration | None = None,
                  universal_cfg: RandomGuideConfiguration | None = None):
@@ -36,13 +63,17 @@ class RandomGuide(Guide):
         if n == 0:
             return []
         roles = self.rng.integers(0, cfg.n_roles, n) + 1
-        if cfg.existential_depth == 'max':
-            depths = [depth - 1] * n
-        else:
-            assert cfg.existential_depth == 'uniform'
-            depths = self.rng.integers(0, depth, n)
-            if cfg.existential_force_depth and (depths < depth - 1).all():
-                depths[self.rng.integers(0, n)] = depth - 1
+        depths = existential_policies[cfg.existential_depth](self.rng, n, depth)
+        if cfg.existential_force_depth is not None and all(d < depth - 1 for d in depths):
+            if cfg.existential_force_depth == 'first':
+                i = 0
+            elif cfg.existential_force_depth == 'last':
+                i = -1
+            elif cfg.existential_force_depth == 'uniform':
+                i = self.rng.integers(0, n)
+            else:
+                raise ValueError(f"Illegal existential_force_depth: `{cfg.existential_force_depth}`")
+            depths[i] = depth - 1
         return list(zip(roles, depths))
 
     def universal_roles(self, depth: int, roles: dict[int, list[int]], universal: bool) -> list[tuple[int, int]]:

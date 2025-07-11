@@ -14,10 +14,8 @@ class RandomGuideConfiguration(pydantic.BaseModel):
     n_roles: int = 1
     existential_low: int = 0
     existential_high: int = 3
-    existential_depth: Literal['max', 'uniform'] = 'max'
-    existential_force_depth: bool = True
-    # TODO forced depth can be at different positions: randomly, last, first
-    # TODO perhaps even it should not be about forced value but rather it should force the deepest to be there?
+    existential_depth: Literal['max', 'uniform', 'ascending', 'descending'] = 'max'
+    existential_force_depth: None | Literal['uniform', 'first', 'last'] = 'uniform'
 
     universal_threshold_low: int = 2
     universal_threshold_high: int = 2
