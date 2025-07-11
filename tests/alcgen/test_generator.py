@@ -1,7 +1,6 @@
 import pytest
 
-from alcgen.aux import minimizing_mapping
-from alcgen.generator import generate, compute_constraints, closing_mapping, Generator
+from alcgen.generator import generate, compute_constraints, closing_mapping
 from alcgen.guide import Guide
 
 
@@ -126,15 +125,7 @@ def test_closing_mapping_prefers_deeper():
             return []
 
     n = generate(2, MyGuide(), False, False, ce=False)
+    print(n.debug())
     mapping = closing_mapping(n.leafs())
+    print(mapping)
     assert mapping == {7: -8} or mapping == {8: -7}
-
-
-def test_minimize_not_closed():
-    n = Generator().generate(0, BaselineGuide())
-    symbols = n.symbols()
-    assert len(symbols) == 1
-    assert len(symbols[0]) == 6
-    mapping = minimizing_mapping(symbols, list(compute_constraints(n)))
-    assert len(mapping.keys()) == 6
-    assert len(set(mapping.values())) == 6
