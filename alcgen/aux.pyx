@@ -36,6 +36,8 @@ cpdef unordered_map[uint, uint] minimizing_mapping(vector[cppset[uint]]& symbols
             max_symbol = max(max_symbol, s)
     mapping: vector[uint]
     mapping.reserve(max_symbol + 1)
+    for i in range(max_symbol + 1):
+        mapping[i] = 0
     p: pair[uint, cppset[uint]]
     for p in cooccurrences:
         s: uint = p.first
@@ -44,26 +46,18 @@ cpdef unordered_map[uint, uint] minimizing_mapping(vector[cppset[uint]]& symbols
         mapped: cppset[uint]
         for r in other:
             if mapping[r] > 0:
-                mapped.insert(r)
+                mapped.insert(mapping[r])
         n: uint = 1
         while mapped.contains(n):
             n += 1
         mapping[s] = n
     result: unordered_map[uint, uint]
     i: uint
-    for i in range(max_symbol + 1):
+    for i in range(1, max_symbol + 1):
         v = mapping[i]
         if v > 0:
             result[i] = v
     return result
-#
-# cdef cppset[uint] union(sets: vector[cppset[uint]]):
-#     # TODO see std::set_union
-#     result: cppset[uint]
-#     item: cppset[uint]
-#     for item in sets:
-#         result.insert(item.cbegin(), item.cend())
-#     return result
 
 # careful, they must be sorted
 cdef cppbool has_nonempty_intersection(cppset[uint]& set1, cppset[uint]& set2):
