@@ -10,8 +10,9 @@ from alcgen.random_guide import RandomGuide
 from alcgen.syntax import to_manchester, to_pretty
 
 
-def config(key_prefix: str, disabled: bool) -> RandomGuideConfiguration | None:
-    n_conjuncts = st.slider("Conjuncts count", min_value=1, max_value=10, value=(1, 3), step=1, disabled=disabled,
+def config(key_prefix: str, disabled: bool, closed: bool) -> RandomGuideConfiguration | None:
+    min_n_conjuncts = 2 if closed else 1
+    n_conjuncts = st.slider("Conjuncts count", min_value=min_n_conjuncts, max_value=10, value=(min_n_conjuncts, 3), step=1, disabled=disabled,
                             key=f"{key_prefix}_n_conjuncts")
     p_disjuncts = st.slider("Disjuncts probability", min_value=0.0, max_value=1.0, step=0.1, disabled=disabled,
                             key=f"{key_prefix}_p_disjuncts")
@@ -52,13 +53,13 @@ prefix = st.text_input("Prefix", value="http://example.com/foo#")
 col1, col2 = st.columns(2)
 
 with col1:
-    base_config = config("base", False)
+    base_config = config("base", False, close)
     use_universals = base_config.universal_threshold_low is not None and base_config.universal_threshold_high is not None
 
 with col2:
     use_universal_config = st.checkbox("Use different parameters in universals", value=False,
                                        disabled=not use_universals)
-    universal_config = config("universal", not use_universal_config)
+    universal_config = config("universal", not use_universal_config, close)
 
 st.download_button("Download config",
                    data=DatasetConfiguration(min_depth=depth, max_depth=depth, n_instances=1,
