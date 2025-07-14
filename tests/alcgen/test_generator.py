@@ -1,11 +1,15 @@
 import copy
+import json
 
+import numpy as np
 import pytest
 
+from alcgen.configuration import DatasetConfiguration
 from alcgen.generator import generate, compute_constraints, merge_constraint_into_symbols, build_index, closing_mapping, \
     Generator, minimizing_mapping
 from alcgen.guide import Guide
 from alcgen.node import Node
+from alcgen.random_guide import RandomGuide
 
 
 class BaselineGuide(Guide):
@@ -187,3 +191,11 @@ def test_forall_not_included_in_closing_mapping():
     n.add_universal(1, Node(3))
     mapping = closing_mapping(n.leafs())
     assert mapping == {2: -3} or mapping == {3: -2}
+
+
+def test_closing_forall_with_existential_inside():
+    text = """{"min_depth":2,"max_depth":2,"n_instances":1,"save_open":false,"save_open_minimized":false,"save_closed":false,"save_closed_minimized":true,"seed_depth":0,"seed_instance":0,"seed_const":4227725670,"prefix":"http://example.com/foo","guide":{"conjuncts_low":1,"conjuncts_high":3,"disjuncts_p":0.0,"disjuncts_low":2,"disjuncts_high":2,"n_roles":1,"existential_low":0,"existential_high":3,"existential_depth":"max","existential_force_depth":"uniform","universal_threshold_low":2,"universal_threshold_high":2,"universal_depth":"max"},"universal_guide":null}"""
+    cfg = DatasetConfiguration(**json.loads(text))
+    n = generate(cfg.min_depth, RandomGuide(np.random.default_rng(cfg.seed_const), cfg.guide, cfg.universal_guide),
+                 False, False, ce=False)
+    assert len(closing_mapping(n.leafs())) > 0

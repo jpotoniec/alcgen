@@ -53,11 +53,18 @@ def closing_mapping(leafs) -> dict[int, CE]:
         if leafs.op == OR:
             # Close all - since the leafs are disjunctive, it suffices that any path is satisfiable for the formula to be satisfiable
             for leaf in leafs.leafs:
-                helper(leaf)
+                if not helper(leaf):
+                    return False
+            return True
         elif leafs.op == AND:
             # Close any - since the leafs are conjunctive, it is sufficient for a single leaf to be unsatisfiable for the whole formula to be unsatisfiable
             # We prefer the deepest, but that is a heuristic with no guarantees
-            helper(max(leafs.leafs, key=lambda leaf: leaf.depth))
+            max_depth = max([l.depth for l in leafs.leafs])
+            for leaf in leafs.leafs:
+                if leaf.depth == max_depth and helper(leaf):
+                    return True
+            else:
+                return False
         else:
             assert leafs.op is None
             assert isinstance(leafs.leafs, Leaf)
@@ -65,7 +72,7 @@ def closing_mapping(leafs) -> dict[int, CE]:
             shared = leafs.leafs.shared
             linked = leafs.leafs.linked
             if any(atom in mapping for atom in atoms):
-                return
+                return True
             atom = next(iter(atoms))
             best = None
             for l in itertools.chain(linked, shared):
@@ -79,11 +86,16 @@ def closing_mapping(leafs) -> dict[int, CE]:
                         best = l
                         if used[best] == 0:
                             break
-            assert best is not None
-            used[best] += 1
-            mapping[atom] = -best
+            if best is not None:
+                used[best] += 1
+                mapping[atom] = -best
+                return True
+            else:
+                return False
 
-    helper(leafs)
+    status = helper(leafs)
+    if not status:
+        raise Exception("Cannot fully close the formula")
     return mapping
 
 
