@@ -20,6 +20,8 @@ def compute_seed(configuration: DatasetConfiguration, depth: int, instance: int)
         seed += configuration.seed_depth * depth
     if configuration.seed_instance is not None:
         seed += configuration.seed_instance * instance
+    if configuration.seed_const is not None:
+        seed += configuration.seed_const
     return seed
 
 

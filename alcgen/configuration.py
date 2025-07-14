@@ -34,6 +34,7 @@ class DatasetConfiguration(pydantic.BaseModel):
 
     seed_depth: int | None = 0xfeed
     seed_instance: int | None = 0xc00ffee
+    seed_const: int | None = None
 
     prefix: str = "http://example.com/foo"
 
