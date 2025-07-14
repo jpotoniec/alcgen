@@ -141,7 +141,7 @@ class Node:
         ac = self.linked_conjuncts
         if linked is not None:
             ac |= linked
-        return Leafs(None, Leaf(self.conjuncts, shared or set(), linked or set()), depth)
+        return Leafs(None, Leaf(self.conjuncts, shared or set(), ac), depth)
 
     def apply_mapping(self, mapping: dict[int, int]) -> None:
         self.conjuncts = {(-1 if c < 0 else 1) * mapping[abs(c)] if abs(c) in mapping else c for c in self.conjuncts}

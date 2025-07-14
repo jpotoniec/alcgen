@@ -88,3 +88,9 @@ def test_symbols():
     n.add_disjunct(Node(5, 6, (1, Node(8))))
     n.add_universal(1, a)
     assert n.symbols() == [{1, 2, 3, 4, 5, 6}, {7, 1, 2}, {9, 1, 2}, {8}]
+
+
+def test_leafs2():
+    n = Node(1, (1, Node(2)))
+    n.add_universal(1, Node(3))
+    assert n.leafs() == Leafs(AND, [Leafs(None, Leaf(atoms={2}, shared=set(), linked={3}), 1)], 1)
