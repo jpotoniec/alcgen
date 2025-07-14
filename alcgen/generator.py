@@ -100,10 +100,11 @@ def closing_mapping(leafs) -> dict[int, CE]:
 
 
 def minimizing_mapping(symbols: list[set[int]]) -> dict[int, int]:
-    cooccurrences = defaultdict(set)
+    cooccurrences = {}
     for batch in symbols:
-        for s in batch:
-            cooccurrences[s] |= batch
+        x = set.union(*[cooccurrences[s] if s in cooccurrences else {s} for s in batch])
+        for s in x:
+            cooccurrences[s] = x
     max_symbol = max(cooccurrences.keys())
     mapping = [None] * (max_symbol + 1)
     for s, other in cooccurrences.items():
