@@ -16,7 +16,7 @@ def test_universal1():
     n = Node((1, Node(1)))
     n.add_universal(1, Node(2))
     assert n.existential[1][0].conjuncts == {1}
-    assert n.existential[1][0].all_conjuncts == {1, 2}
+    assert n.existential[1][0].gather_all_conjuncts(set()) == {1, 2}
 
 
 def test_universal2():
@@ -34,11 +34,11 @@ def test_all_conjuncts1():
     b.add_universal(1, a)
     c = Node((1, Node(5, (1, Node(6, (1, Node(2)))))))
     c.add_universal(1, b)
-    assert c.all_conjuncts == set()
+    assert c.gather_all_conjuncts(set()) == set()
     b1 = next(iter(c.existential[1]))
-    assert b1.all_conjuncts == {4, 5}
+    assert b1.gather_all_conjuncts(set()) == {4, 5}
     c1 = next(iter(b1.existential[1]))
-    assert c1.all_conjuncts == {3, 6}
+    assert c1.gather_all_conjuncts(set()) == {3, 6}
 
 
 def test_all_conjuncts2():
@@ -49,11 +49,11 @@ def test_all_conjuncts2():
     c = Node()
     c.add_universal(1, b)
     c.add_existential(1, Node(5, (1, Node(6, (1, Node(2))))))
-    assert c.all_conjuncts == set()
+    assert c.gather_all_conjuncts(set()) == set()
     b1 = next(iter(c.existential[1]))
-    assert b1.all_conjuncts == {4, 5}
+    assert b1.gather_all_conjuncts(set()) == {4, 5}
     c1 = next(iter(b1.existential[1]))
-    assert c1.all_conjuncts == {3, 6}
+    assert c1.gather_all_conjuncts(set()) == {3, 6}
 
 
 def test_leafs():
@@ -63,7 +63,7 @@ def test_leafs():
     b.add_universal(1, a)
     c = Node((1, Node((1, Node((1, Node(2)))))))
     c.add_universal(1, b)
-    assert c.leafs() == Leafs(4, [Leafs(4, [Leafs(4, [Leafs(None, Leaf({2}, set(), set()), 3)], 3)], 3)], 3)
+    assert c.leafs() == Leafs(4, [Leafs(4, [Leafs(4, [Leafs(None, Leaf({2}, set(), {1}), 3)], 3)], 3)], 3)
 
 
 def test_apply_mapping():
@@ -87,7 +87,17 @@ def test_symbols():
     n.add_disjunct(Node(4, 5))
     n.add_disjunct(Node(5, 6, (1, Node(8))))
     n.add_universal(1, a)
-    assert n.symbols() == [{1, 2, 3, 4, 5, 6}, {7, 1, 2}, {9, 1, 2}, {8}]
+    c = n.cooccurrences().to_dict()
+    assert c.keys() == {1, 2, 3, 4, 5, 6, 7, 8, 9}
+    assert c[1] == {1, 2, 3, 4, 5, 6, 7, 9}
+    assert c[2] == {1, 2, 3, 4, 5, 6, 7, 9}
+    assert c[3] == {1, 2, 3, 4, 5, 6, 7, 9}
+    assert c[4] == {1, 2, 3, 4, 5, 6, 7, 9}
+    assert c[5] == {1, 2, 3, 4, 5, 6, 7, 9}
+    assert c[6] == {1, 2, 3, 4, 5, 6, 7, 9}
+    assert c[7] == {1, 2, 3, 4, 5, 6, 7, 9}
+    assert c[8] == {8}
+    assert c[9] == {1, 2, 3, 4, 5, 6, 7, 9}
 
 
 def test_leafs2():

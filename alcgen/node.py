@@ -1,6 +1,7 @@
 import itertools
 from collections import defaultdict
 
+from alcgen.cooccurrences import Cooccurrences
 from alcgen.leaf import Leafs, Leaf
 from alcgen.syntax import CE, AND, ANY, OR, TOP, to_pretty, ALL, NOT
 
@@ -88,20 +89,21 @@ class Node:
     def debug(self) -> str:
         return to_pretty(self.to_ce())
 
-    @property
-    def all_conjuncts(self) -> set[int]:
-        return self.conjuncts | self.linked_conjuncts
+    def gather_all_conjuncts(self, target: set[int]) -> set[int]:
+        target.update(self.conjuncts)
+        self.gather_linked_conjuncts(target)
+        return target
 
-    @property
-    def linked_conjuncts(self) -> set[int]:
-        if len(self.linked) > 0:
-            return set.union(*[node.all_conjuncts for node in self.linked])
-        else:
-            return set()
+    def gather_linked_conjuncts(self, target: set[int]) -> set[int]:
+        for node in self.linked:
+            node.gather_all_conjuncts(target)
+        return target
 
-    @property
-    def all_disjuncts(self) -> list["Node"]:
-        return list(itertools.chain(self.disjuncts, *[node.all_disjuncts for node in self.linked]))
+    def gather_all_disjuncts(self, target: list["Node"]) -> list["Node"]:
+        target += self.disjuncts
+        for node in self.linked:
+            node.gather_all_disjuncts(target)
+        return target
 
     @property
     def all_existential(self) -> dict[int, list["Node"]]:
@@ -122,12 +124,12 @@ class Node:
         return result
 
     def leafs(self, shared: set | None = None, linked: set | None = None, depth: int = 0) -> Leafs:
-        disjuncts = self.all_disjuncts
+        disjuncts = self.gather_all_disjuncts([])
         if len(disjuncts) > 0:
             assert shared is None
             assert linked is None
             shared = self.conjuncts
-            linked = self.linked_conjuncts
+            linked = self.gather_linked_conjuncts(set())
             # Don't increase depth in disjunction, because that is not another level of the model
             leafs = [d.leafs(shared, linked, depth) for d in disjuncts]
             return Leafs(OR, leafs, max(leaf.depth for leaf in leafs))
@@ -138,7 +140,7 @@ class Node:
                 for n in nodes:
                     leafs.append(n.leafs(depth=depth + 1))
             return Leafs(AND, leafs, max(leaf.depth for leaf in leafs))
-        ac = self.linked_conjuncts
+        ac = self.gather_linked_conjuncts(set())
         if linked is not None:
             ac |= linked
         return Leafs(None, Leaf(self.conjuncts, shared or set(), ac), depth)
@@ -148,18 +150,21 @@ class Node:
         for n in itertools.chain(self.disjuncts, *self.existential.values(), *self.universal.values()):
             n.apply_mapping(mapping)
 
-    def symbols(self) -> list[set[int]]:
-        result = [{abs(s) for s in self.all_conjuncts}]
+    def _cooccurrences(self, target: Cooccurrences, prefix: set[int] | None):
+        top = {abs(s) for s in self.gather_all_conjuncts(set())}
+        if prefix is not None:
+            top.update(prefix)
+        target.add(top)
         for e in itertools.chain(*self.existential.values()):
-            result += e.symbols()
+            e._cooccurrences(target, None)
         for e in itertools.chain(*self.universal.values()):
-            # Ignore the top-level in universals as it is handled elsewhere.
-            # TODO Does this work correctly in the case of nested universals?
-            result += e.symbols()[1:]
-        for d in self.all_disjuncts:
-            dsymbols = d.symbols()
-            result[0] |= dsymbols[0]
-            result += dsymbols[1:]
+            e._cooccurrences(target, None)
+        for d in self.gather_all_disjuncts([]):
+            d._cooccurrences(target, top)
+
+    def cooccurrences(self) -> Cooccurrences:
+        result = Cooccurrences()
+        self._cooccurrences(result, None)
         return result
 
     def depth(self) -> int:

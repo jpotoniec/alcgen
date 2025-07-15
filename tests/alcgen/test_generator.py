@@ -5,7 +5,8 @@ import numpy as np
 import pytest
 
 from alcgen.configuration import DatasetConfiguration
-from alcgen.generator import generate, compute_constraints, merge_constraint_into_symbols, build_index, closing_mapping, \
+from alcgen.cooccurrences import Cooccurrences
+from alcgen.generator import generate, compute_constraints, merge_constraint_into_symbols, closing_mapping, \
     Generator, minimizing_mapping
 from alcgen.guide import Guide
 from alcgen.node import Node
@@ -112,38 +113,36 @@ def test_constraints():
 
 
 def test_merge_constraint_into_symbols_partial():
-    original = [{1, 2}, {3, 19, 4, 20}, {5, 6, 9, 10, 25, 26}, {7, 8, 9, 10, 25, 26}, {11, 19, 12, 20},
-                {13, 14, 17, 18, 25, 26}, {15, 16, 17, 18, 25, 26}, {25, 26, 21, 22}, {24, 25, 26, 23}]
-    symbols = copy.deepcopy(original)
-    merge_constraint_into_symbols(symbols, build_index(symbols), ({9, 10}, {17, 18}))
-    assert len(original) == len(symbols)
-    modified = [i for i in range(len(original)) if original[i] != symbols[i]]
-    assert len(modified) == 1
-    m = modified[0]
-    d = symbols[m] - original[m]
-    assert len(d) == 1
-    assert d <= {9, 10, 17, 18}
+    cooccurences = Cooccurrences()
+    for item in [{1, 2}, {3, 19, 4, 20}, {5, 6, 9, 10, 25, 26}, {7, 8, 9, 10, 25, 26}, {11, 19, 12, 20},
+                 {13, 14, 17, 18, 25, 26}, {15, 16, 17, 18, 25, 26}, {25, 26, 21, 22}, {24, 25, 26, 23}]:
+        cooccurences.add(item)
+    merge_constraint_into_symbols(cooccurences, ({9, 10}, {17, 18}))
+    assert cooccurences.has_nonempty_intersection({9}, {17, 18})
 
 
 def test_merge_constraint_into_symbols_full():
-    original = [{1, 2}, {3, 19, 4, 20}, {5, 6, 9, 10, 25, 26}, {7, 8, 9, 10, 25, 26}, {11, 19, 12, 20},
-                {13, 14, 17, 18, 25, 26}, {15, 16, 17, 18, 25, 26}, {25, 26, 21, 22}, {24, 25, 26, 23}]
-    symbols = copy.deepcopy(original)
-    merge_constraint_into_symbols(symbols, build_index(symbols), ({5, 6}, {25, 26}))
-    assert original == symbols
+    cooccurences = Cooccurrences()
+    for item in [{1, 2}, {3, 19, 4, 20}, {5, 6, 9, 10, 25, 26}, {7, 8, 9, 10, 25, 26}, {11, 19, 12, 20},
+                 {13, 14, 17, 18, 25, 26}, {15, 16, 17, 18, 25, 26}, {25, 26, 21, 22}, {24, 25, 26, 23}]:
+        cooccurences.add(item)
+    original = copy.deepcopy(cooccurences)
+    merge_constraint_into_symbols(cooccurences, ({5, 6}, {25, 26}))
+    assert original.to_list() == cooccurences.to_list()
 
 
 def test_merge_constraint_into_symbols_missing():
-    original = [{1, 2}, {3, 19, 4, 20}, {5, 6, 9, 10, 25, 26}, {7, 8, 9, 10, 25, 26}, {11, 19, 12, 20},
-                {13, 14, 17, 18, 25, 26}, {15, 16, 17, 18, 25, 26}, {25, 26, 21, 22}, {24, 25, 26, 23}]
-    symbols = copy.deepcopy(original)
-    merge_constraint_into_symbols(symbols, build_index(symbols), ({30, 31}, {32, 33}))
-    assert len(original) == len(symbols)
-    assert original[1:] == symbols[1:]
-    d = symbols[0] - original[0]
-    assert len(d) == 2
-    assert len(d & {30, 31}) == 1
-    assert len(d & {32, 33}) == 1
+    cooccurences = Cooccurrences()
+    for item in [{1, 2}, {3, 19, 4, 20}, {5, 6, 9, 10, 25, 26}, {7, 8, 9, 10, 25, 26}, {11, 19, 12, 20},
+                 {13, 14, 17, 18, 25, 26}, {15, 16, 17, 18, 25, 26}, {25, 26, 21, 22}, {24, 25, 26, 23}]:
+        cooccurences.add(item)
+    merge_constraint_into_symbols(cooccurences, ({30, 31}, {32, 33}))
+    lists = [l for l in cooccurences.to_list() if 30 in l or 31 in l]
+    assert len(lists) == 1
+    x = lists[0]
+    assert len(x) == 2
+    assert len(x & {30, 31}) == 1
+    assert len(x & {32, 33}) == 1
 
 
 def test_closing_mapping_prefers_deeper():
@@ -174,14 +173,11 @@ def test_closing_mapping_prefers_deeper():
 
 def test_minimize_not_closed():
     n = Generator().generate(0, BaselineGuide())
-    symbols = n.symbols()
-    assert len(symbols) == 1
-    assert len(symbols[0]) == 6
-    symbols = n.symbols()
-    index = build_index(symbols)
+    cooccurrences = n.cooccurrences()
+    assert cooccurrences.to_list() == [{1, 2, 3, 4, 5, 6}]
     for constraint in compute_constraints(n):
-        merge_constraint_into_symbols(symbols, index, constraint)
-    mapping = minimizing_mapping(symbols)
+        merge_constraint_into_symbols(cooccurrences, constraint)
+    mapping = minimizing_mapping(cooccurrences)
     assert len(mapping.keys()) == 6
     assert len(set(mapping.values())) == 6
 

@@ -2,6 +2,7 @@ import itertools
 import typing
 from collections import defaultdict, Counter
 
+from alcgen.cooccurrences import Cooccurrences
 from alcgen.guide import Guide
 from alcgen.leaf import Leafs, Leaf
 from alcgen.node import Node
@@ -99,20 +100,17 @@ def closing_mapping(leafs) -> dict[int, CE]:
     return mapping
 
 
-def minimizing_mapping(symbols: list[set[int]]) -> dict[int, int]:
-    cooccurrences = {}
-    for batch in symbols:
-        x = set.union(*[cooccurrences[s] if s in cooccurrences else {s} for s in batch])
-        for s in x:
-            cooccurrences[s] = x
-    max_symbol = max(cooccurrences.keys())
+def minimizing_mapping(cooccurrences: Cooccurrences) -> dict[int, int]:
+    max_symbol = cooccurrences.max_item
     mapping = [None] * (max_symbol + 1)
-    for s, other in cooccurrences.items():
-        mapped = {mapping[r] for r in other if mapping[r] is not None}
-        n = 1
-        while n in mapped:
-            n += 1
-        mapping[s] = n
+    last = Counter()
+    for x, p in cooccurrences.items():
+        last[p] += 1
+        mapping[x] = last[p]
+    # for items in cooccurrences.to_list():
+    #     assert all(mapping[item] is None for item in items)
+    #     for n, item in enumerate(items):
+    #         mapping[item] = n + 1
     return {i: v for i, v in enumerate(mapping) if v is not None}
 
 
@@ -183,33 +181,19 @@ def union(*sets: set[int]) -> set[int]:
     return result
 
 
-def merge_constraint_into_symbols(symbols: list[set[int]], index: defaultdict[int, set[int]],
-                                  constraint: tuple[set[int], set[int]]) -> None:
+def merge_constraint_into_symbols(cooccurrences: Cooccurrences, constraint: tuple[set[int], set[int]]) -> None:
     """
     For the constraint to be satisfied the left set must differ from the right set, i.e., they must differ by at least one element.
     """
     left, right = constraint
     left = {abs(x) for x in left}
     right = {abs(y) for y in right}
-    lidx = union(*[index[s] for s in left])
-    ridx = union(*[index[s] for s in right])
-
-    if len(lidx & ridx) > 0:
+    if cooccurrences.has_nonempty_intersection(left, right):
         # Already satisfied
         return
-    lidx |= ridx
-    if len(lidx) > 0:
-        i = next(iter(lidx))
-    else:
-        i = 0
-    if len(left & symbols[i]) == 0:
-        s = next(iter(left))
-        symbols[i].add(s)
-        index[s].add(i)
-    if len(right & symbols[i]) == 0:
-        s = next(iter(right))
-        symbols[i].add(s)
-        index[s].add(i)
+    any_left = next(iter(left))
+    any_right = next(iter(right))
+    cooccurrences.add({any_left, any_right})
 
 
 def build_index(symbols: list[set[int]]) -> defaultdict[int, set[int]]:
@@ -225,11 +209,10 @@ def do_close(n: Node):
 
 
 def do_minimize(n: Node):
-    symbols = n.symbols()
-    index = build_index(symbols)
+    cooccurrences = n.cooccurrences()
     for constraint in compute_constraints(n):
-        merge_constraint_into_symbols(symbols, index, constraint)
-    n.apply_mapping(minimizing_mapping(symbols))
+        merge_constraint_into_symbols(cooccurrences, constraint)
+    n.apply_mapping(minimizing_mapping(cooccurrences))
 
 
 def generate(depth: int, guide: Guide, close: bool, minimize: bool, ce: bool = True) -> CE | Node:
