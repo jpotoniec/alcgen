@@ -14,8 +14,12 @@ def test_cooccurrences1():
                            5: {1, 2, 3, 4, 5}}
 
 
-def freeze(items):
-    return {frozenset(i) for i in items}
+def test_dsu():
+    c = Cooccurrences()
+    c.union_many({1, 2, 3})
+    c.union_many({4, 5})
+    c.union_many({3, 5})
+    print(c.to_list())
 
 
 def test_dsu_union():
@@ -24,13 +28,13 @@ def test_dsu_union():
     d.union(1, 3)
     assert d.to_list() == [{1, 2, 3}]
     d.union(4, 5)
-    assert freeze(d.to_list()) == freeze([{1, 2, 3}, {4, 5}])
+    assert d.to_list() == [{1, 2, 3}, {4, 5}]
     d.union(3, 6)
-    assert freeze(d.to_list()) == freeze([{1, 2, 3, 6}, {4, 5}])
+    assert d.to_list() == [{1, 2, 3, 6}, {4, 5}]
     d.find(7)
-    assert freeze(d.to_list()) == freeze([{1, 2, 3, 6}, {4, 5}, {7}])
+    assert d.to_list() == [{1, 2, 3, 6}, {4, 5}, {7}]
     d.union(5, 8)
-    assert freeze(d.to_list()) == freeze([{1, 2, 3, 6}, {4, 5, 8}, {7}])
+    assert d.to_list() == [{1, 2, 3, 6}, {4, 5, 8}, {7}]
 
 
 def test_dsu_union_many():
@@ -38,13 +42,13 @@ def test_dsu_union_many():
     d.union_many({1, 2, 3})
     assert d.to_list() == [{1, 2, 3}]
     d.union_many({4, 5})
-    assert freeze(d.to_list()) == freeze([{1, 2, 3}, {4, 5}])
+    assert d.to_list() == [{1, 2, 3}, {4, 5}]
     d.union_many({3, 6})
-    assert freeze(d.to_list()) == freeze([{1, 2, 3, 6}, {4, 5}])
+    assert d.to_list() == [{1, 2, 3, 6}, {4, 5}]
     d.union_many({7})
-    assert freeze(d.to_list()) == freeze([{1, 2, 3, 6}, {4, 5}, {7}])
+    assert d.to_list() == [{1, 2, 3, 6}, {4, 5}, {7}]
     d.union_many({5, 8})
-    assert freeze(d.to_list()) == freeze([{1, 2, 3, 6}, {4, 5, 8}, {7}])
+    assert d.to_list() == [{1, 2, 3, 6}, {4, 5, 8}, {7}]
     assert d.has_nonempty_intersection({3}, {2, 4})
     assert not d.has_nonempty_intersection({3}, {4})
     assert not d.has_nonempty_intersection({17}, {3, 4})
