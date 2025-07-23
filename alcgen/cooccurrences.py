@@ -12,42 +12,35 @@ class Cooccurrences:
             self._parent[x] = x
             self._rank[x] = 0
             return x
-        p = self._parent[x]
-        if p != x:
-            self._parent[x] = p = self.find(p)
-            return p
-        else:
-            return x
+        while self._parent[x] != x:
+            self._parent[x] = self._parent[self._parent[x]]
+            x = self._parent[x]
+        return x
 
     def union(self, x: int, y: int):
-        x = self.find(x)
-        y = self.find(y)
-        if x == y:
-            return
-        if self._rank[x] < self._rank[y]:
-            x, y = y, x
-        self._parent[y] = x
-        if self._rank[x] == self._rank[y]:
-            self._rank[x] += 1
+        self.union_many([x, y])
 
     def union_many(self, items: Collection[int]):
         if len(items) == 0:
             return
-        i = iter(items)
-        y = self.find(next(i))
-        try:
-            while True:
-                x = self.find(next(i))
-                if x == y:
-                    continue
-                if self._rank[x] < self._rank[y]:
-                    x, y = y, x
-                self._parent[y] = x
-                if self._rank[x] == self._rank[y]:
-                    self._rank[x] += 1
-                y = x
-        except StopIteration:
-            pass
+        it = iter(items)
+        y = self.find(next(it))
+        ry = self._rank[y]
+        for x in it:
+            x = self.find(x)
+            if x == y:
+                continue
+            rx = self._rank[x]
+            if rx < ry:
+                x, y = y, x
+                # don't swap rx and ry, since they would be swapped back anyhow
+            elif rx == ry:
+                self._rank[x] += 1
+                ry = rx + 1
+            else:
+                ry = rx
+            self._parent[y] = x
+            y = x
 
     def items(self) -> Generator[tuple[int, int], None, None]:
         for x in self._parent.keys():

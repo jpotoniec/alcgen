@@ -75,7 +75,6 @@ class Node:
     def add_existential(self, r: int, n: "Node"):
         if r in self.universal:
             for other in self.universal[r]:
-                # n.merge_with(other)
                 n.link(other)
         self.existential[r].append(n)
 

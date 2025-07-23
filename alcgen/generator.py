@@ -107,10 +107,6 @@ def minimizing_mapping(cooccurrences: Cooccurrences) -> dict[int, int]:
     for x, p in cooccurrences.items():
         last[p] += 1
         mapping[x] = last[p]
-    # for items in cooccurrences.to_list():
-    #     assert all(mapping[item] is None for item in items)
-    #     for n, item in enumerate(items):
-    #         mapping[item] = n + 1
     return {i: v for i, v in enumerate(mapping) if v is not None}
 
 
