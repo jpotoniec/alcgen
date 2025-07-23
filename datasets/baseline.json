@@ -1,0 +1,29 @@
+{
+  "min_depth": 0,
+  "max_depth": 10,
+  "n_instances": 10,
+  "save_open": true,
+  "save_open_minimized": true,
+  "save_closed": true,
+  "save_closed_minimized": true,
+  "seed_depth": 2865410412,
+  "seed_instance": 3154519833,
+  "seed_const": null,
+  "prefix": "http://example.com/benchmark",
+  "guide": {
+    "conjuncts_low": 2,
+    "conjuncts_high": 3,
+    "disjuncts_p": 0.5,
+    "disjuncts_low": 2,
+    "disjuncts_high": 3,
+    "n_roles": 1,
+    "existential_low": 0,
+    "existential_high": 3,
+    "existential_depth": "uniform",
+    "existential_force_depth": "uniform",
+    "universal_threshold_low": 2,
+    "universal_threshold_high": 2,
+    "universal_depth": "uniform"
+  },
+  "universal_guide": null
+}
