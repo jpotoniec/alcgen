@@ -3,7 +3,7 @@
 prefix=$1
 shift
 
-ulimit -t 600
+ulimit -t 3600
 ulimit -m $((32*1024*1024))
 JAVAOPS=-Xmx16G
 
