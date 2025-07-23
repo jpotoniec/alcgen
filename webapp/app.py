@@ -84,5 +84,5 @@ if st.button("Generate"):
     ce = generate(depth, RandomGuide(np.random.default_rng(seed), base_config, universal_config), close, minimize)
     st.text(to_pretty(ce))
     with io.StringIO() as f:
-        to_manchester(ce, "http://examples.com/foo", f)
+        to_manchester(ce, prefix, f)
         st.download_button("Download", data=f.getvalue(), mime="text/plain", file_name="result.owl")
