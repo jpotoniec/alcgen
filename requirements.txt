@@ -1,5 +1,5 @@
-numpy~=2.3.1
+numpy
 pytest
 tqdm
-fire~=0.7.0
-pydantic~=2.11.7
+fire
+pydantic
