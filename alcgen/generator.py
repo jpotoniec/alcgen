@@ -123,7 +123,7 @@ def nonclosing_mapping(cooccurrences: Cooccurrences) -> dict[int, int]:
         mapping[pair[0]] = -pair[1]
         used[pair[0]] = True
         used[pair[1]] = True
-        cooccurrences.union(pair[0], pair[1])
+        cooccurrences.union_many(pair)
     return {k: v for k, v in enumerate(mapping) if v is not None}
 
 
@@ -231,26 +231,31 @@ def do_close(n: Node):
     n.apply_mapping(closing_mapping(n.leafs()))
 
 
-def do_minimize(n: Node):
-    cooccurrences = n.cooccurrences()
-    for constraint in compute_constraints(n):
-        merge_constraint_into_symbols(cooccurrences, constraint)
+def do_minimize(n: Node, cooccurrences: Cooccurrences | None = None):
+    if cooccurrences is None:
+        cooccurrences = n.cooccurrences()
+        for constraint in compute_constraints(n):
+            merge_constraint_into_symbols(cooccurrences, constraint)
     n.apply_mapping(minimizing_mapping(cooccurrences))
+
 
 def introduce_negations(n: Node):
     cooccurrences = n.cooccurrences()
     for constraint in compute_constraints(n):
         merge_constraint_into_symbols(cooccurrences, constraint)
     n.apply_mapping(nonclosing_mapping(cooccurrences))
+    return cooccurrences
+
 
 def generate(depth: int, guide: Guide, close: bool, minimize: bool, ce: bool = True) -> CE | Node:
     n = Generator().generate(depth, guide)
+    cooccurrences = None
     if close:
         do_close(n)
     else:
-        introduce_negations(n)
+        cooccurrences = introduce_negations(n)
     if minimize:
-        do_minimize(n)
+        do_minimize(n, cooccurrences)
     if ce:
         return n.to_ce()
     else:

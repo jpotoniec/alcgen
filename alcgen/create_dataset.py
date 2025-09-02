@@ -6,7 +6,7 @@ import numpy as np
 from tqdm import trange
 
 from alcgen.configuration import DatasetConfiguration
-from alcgen.generator import Generator, do_minimize, do_close
+from alcgen.generator import Generator, do_minimize, do_close, introduce_negations
 from alcgen.node import Node
 from alcgen.random_guide import RandomGuide
 from alcgen.syntax import to_manchester
@@ -51,12 +51,14 @@ def create_dataset(configuration: DatasetConfiguration, target_dir: os.PathLike 
             if not (save_open or save_open_minimized or save_closed or save_closed_minimized):
                 continue
             n = Generator().generate(depth, guide)
-            if save_open:
-                save(open_fn, configuration, n)
-            if save_open_minimized:
+            if save_open or save_open_minimized:
                 m = copy.deepcopy(n)
-                do_minimize(m)
-                save(open_minimized_fn, configuration, m)
+                cooccurrences = introduce_negations(m)
+                if save_open:
+                    save(open_fn, configuration, m)
+                if save_open_minimized:
+                    do_minimize(m, cooccurrences)
+                    save(open_minimized_fn, configuration, m)
             if save_closed or save_closed_minimized:
                 do_close(n)
                 if save_closed:
