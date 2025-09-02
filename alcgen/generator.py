@@ -100,6 +100,33 @@ def closing_mapping(leafs) -> dict[int, CE]:
     return mapping
 
 
+def nonclosing_mapping(cooccurrences: Cooccurrences) -> dict[int, int]:
+    n_symbols = cooccurrences.max_item + 1
+    mapping = [None] * n_symbols
+    used = [False] * n_symbols
+    while True:
+        families = cooccurrences.to_list()
+        if len(families) <= 1:
+            break
+        pair = []
+        for f in families:
+            for s in f:
+                if used[s]:
+                    continue
+                pair.append(s)
+                break
+            if len(pair) == 2:
+                break
+        if len(pair) < 2:
+            break
+        assert len(pair) == 2
+        mapping[pair[0]] = -pair[1]
+        used[pair[0]] = True
+        used[pair[1]] = True
+        cooccurrences.union(pair[0], pair[1])
+    return {k: v for k, v in enumerate(mapping) if v is not None}
+
+
 def minimizing_mapping(cooccurrences: Cooccurrences) -> dict[int, int]:
     max_symbol = cooccurrences.max_item
     mapping = [None] * (max_symbol + 1)
@@ -210,11 +237,18 @@ def do_minimize(n: Node):
         merge_constraint_into_symbols(cooccurrences, constraint)
     n.apply_mapping(minimizing_mapping(cooccurrences))
 
+def introduce_negations(n: Node):
+    cooccurrences = n.cooccurrences()
+    for constraint in compute_constraints(n):
+        merge_constraint_into_symbols(cooccurrences, constraint)
+    n.apply_mapping(nonclosing_mapping(cooccurrences))
 
 def generate(depth: int, guide: Guide, close: bool, minimize: bool, ce: bool = True) -> CE | Node:
     n = Generator().generate(depth, guide)
     if close:
         do_close(n)
+    else:
+        introduce_negations(n)
     if minimize:
         do_minimize(n)
     if ce:

@@ -7,7 +7,7 @@ import pytest
 from alcgen.configuration import DatasetConfiguration
 from alcgen.cooccurrences import Cooccurrences
 from alcgen.generator import generate, compute_constraints, merge_constraint_into_symbols, closing_mapping, \
-    Generator, minimizing_mapping
+    Generator, minimizing_mapping, introduce_negations
 from alcgen.guide import Guide
 from alcgen.node import Node
 from alcgen.random_guide import RandomGuide
@@ -195,3 +195,9 @@ def test_closing_forall_with_existential_inside():
     n = generate(cfg.min_depth, RandomGuide(np.random.default_rng(cfg.seed_const), cfg.guide, cfg.universal_guide),
                  False, False, ce=False)
     assert len(closing_mapping(n.leafs())) > 0
+
+
+def test_introduce_negations():
+    n = Node(Node(1), Node(2))
+    introduce_negations(n)
+    assert n.to_ce() in {Node(Node(-2), Node(2)).to_ce(), Node(Node(2), Node(-2)).to_ce()}
