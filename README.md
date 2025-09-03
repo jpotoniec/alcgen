@@ -17,14 +17,19 @@ and then navigate your web browser to [http://localhost:8501/](http://localhost:
 
 ### The command-line interface from the Docker image
 
-Run the following command
-
+1. Create a directory where you will store the configuration file and the generated files. 
+   The remainder of the instruction assumes it is called `target` and it resides in the current 
+   working directory.
+2. Create a configuration file within that directory. The remainder of the instruction assumes 
+   it is called `target/baseline.json`
+3. Run the Docker image, mounting the `target` directory as the directory `/target` in the Docker container.
+   You can use the following command:
 ```shell
 docker run --mount type=bind,source=$PWD/target,destination=/target --rm jpotoniec/alcgen /target/baseline.json
 ```
+4. Wait until the container terminates. The generated files are now available in the `target/baseline` directory.
+   The subdirectory name is derived from the name of the configuration file.
 
-where `baseline.json` is the name of a configuration file in the `target` subdirectory of the current working dir (
-`$PWD`)
 
 ### The command-line interface from the source code
 
